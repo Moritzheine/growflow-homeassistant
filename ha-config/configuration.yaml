@@ -1,0 +1,14 @@
+# GrowFlow Development Configuration
+default_config:
+
+logger:
+  default: info
+  logs:
+    custom_components.growflow: debug
+
+homeassistant:
+  name: "GrowFlow Dev"
+  latitude: 52.5200
+  longitude: 13.4050
+  unit_system: metric
+  time_zone: "Europe/Berlin"

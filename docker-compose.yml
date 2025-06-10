@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  homeassistant:
+    container_name: growflow-ha-dev
+    image: homeassistant/home-assistant:stable
+    volumes:
+      - ./ha-config:/config
+      - ./custom_components:/config/custom_components
+    ports:
+      - "8123:8123"
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Berlin
