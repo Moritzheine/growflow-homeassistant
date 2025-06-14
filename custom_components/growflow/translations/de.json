@@ -1,0 +1,80 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GrowFlow - Neues Gerät hinzufügen",
+        "description": "Wähle den Geräte-Typ",
+        "data": {
+          "device_type": "Geräte-Typ"
+        },
+        "data_description": {
+          "device_type": "Growbox: Überwacht Umgebungsbedingungen\nPflanze: Trackt individuelle Pflanzen"
+        }
+      },
+      "growbox": {
+        "title": "Growbox hinzufügen",
+        "description": "Konfiguriere deine neue Growbox",
+        "data": {
+          "growbox_name": "Name der Growbox"
+        }
+      },
+      "plant": {
+        "title": "Pflanze hinzufügen",
+        "description": "Konfiguriere deine neue Pflanze",
+        "data": {
+          "plant_name": "Name der Pflanze",
+          "plant_strain": "Strain/Sorte",
+          "planted_date": "Pflanzdatum",
+          "growth_stage": "Wachstumsphase"
+        }
+      },
+      "plant_growbox": {
+        "title": "Growbox zuweisen",
+        "description": "Weise die Pflanze einer Growbox zu",
+        "data": {
+          "plant_growbox": "Growbox"
+        }
+      },
+      "sensors": {
+        "title": "Sensoren & Aktoren zuweisen",
+        "description": "Weise deiner Growbox '{growbox_name}' Sensoren und Aktoren zu",
+        "data": {
+          "temperature_entity": "Temperatursensor (optional)",
+          "humidity_entity": "Feuchtigkeitssensor (optional)",
+          "hygrostat_entity": "Hygrostat/Befeuchter (optional)",
+          "target_vpd": "Ziel-VPD Wert (kPa)"
+        }
+      },
+      "plant_sensors": {
+        "title": "Pflanzensensoren zuweisen",
+        "description": "Weise deiner Pflanze Sensoren zu",
+        "data": {
+          "soil_moisture_entity": "Bodenfeuchtigkeitssensor (optional)",
+          "ec_entity": "EC-Sensor (optional)",
+          "ph_entity": "pH-Sensor (optional)"
+        }
+      }
+    },
+    "error": {
+      "name_exists": "Ein Gerät mit diesem Namen existiert bereits",
+      "no_growboxes": "Keine Growboxen verfügbar. Erstelle zuerst eine Growbox."
+    },
+    "abort": {
+      "already_configured": "Diese Growbox ist bereits konfiguriert"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Growbox '{growbox_name}' konfigurieren",
+        "description": "Ändere die Sensoren und Einstellungen für deine Growbox",
+        "data": {
+          "temperature_entity": "Temperatursensor (optional)",
+          "humidity_entity": "Feuchtigkeitssensor (optional)",
+          "hygrostat_entity": "Hygrostat/Befeuchter (optional)",
+          "target_vpd": "Ziel-VPD Wert (kPa)"
+        }
+      }
+    }
+  }
+}

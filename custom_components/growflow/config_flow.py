@@ -1,130 +1,300 @@
 """Config flow for GrowFlow integration."""
+from __future__ import annotations
+
 import logging
-from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.const import CONF_NAME
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
 
-from .const import DOMAIN, GROW_TYPES, GROW_PHASES, GROW_TYPE_NAMES, PHASE_NAMES
+from .const import (
+    DOMAIN, 
+    CONF_GROWBOX_NAME,
+    CONF_TEMPERATURE_ENTITY,
+    CONF_HUMIDITY_ENTITY,
+    CONF_HYGROSTAT_ENTITY,
+    CONF_TARGET_VPD,
+    DEFAULT_TARGET_VPD,
+    # Plant constants
+    CONF_PLANT_NAME,
+    CONF_PLANT_STRAIN,
+    CONF_PLANT_GROWBOX,
+    CONF_PLANTED_DATE,
+    CONF_GROWTH_STAGE,
+    CONF_SOIL_MOISTURE_ENTITY,
+    CONF_EC_ENTITY,
+    CONF_PH_ENTITY,
+    GROWTH_STAGES,
+    GROWTH_STAGE_SEEDLING,
+)
 
 _LOGGER = logging.getLogger(__name__)
+
+STEP_USER_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required("device_type", default="growbox"): vol.In(["growbox", "plant"]),
+    }
+)
+
+STEP_GROWBOX_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_GROWBOX_NAME, default="Growbox 1"): str,
+    }
+)
+
+STEP_PLANT_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_PLANT_NAME): str,
+        vol.Optional(CONF_PLANT_STRAIN, default="Unknown"): str,
+        vol.Required(CONF_PLANTED_DATE): selector.DateSelector(),
+        vol.Optional(CONF_GROWTH_STAGE, default=GROWTH_STAGE_SEEDLING): vol.In(GROWTH_STAGES),
+    }
+)
+
+STEP_SENSORS_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_TEMPERATURE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+        ),
+        vol.Optional(CONF_HUMIDITY_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+        ),
+        vol.Optional(CONF_HYGROSTAT_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain=["switch", "fan", "humidifier"])
+        ),
+        vol.Optional(CONF_TARGET_VPD, default=DEFAULT_TARGET_VPD): vol.All(
+            vol.Coerce(float), vol.Range(min=0.4, max=2.0)
+        ),
+    }
+)
+
+STEP_PLANT_SENSORS_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_SOIL_MOISTURE_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+        ),
+        vol.Optional(CONF_EC_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+        vol.Optional(CONF_PH_ENTITY): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
+        ),
+    }
+)
+
 
 class GrowFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for GrowFlow."""
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: Optional[Dict[str, Any]] = None
-    ) -> FlowResult:
-        """Handle the initial step."""
-        errors = {}
-        
-        if user_input is not None:
-            # Validate unique name
-            existing_entries = [
-                entry.data["name"] for entry in self._async_current_entries()
-            ]
-            
-            if user_input["name"] in existing_entries:
-                errors["name"] = "name_exists"
-            else:
-                # Parse date string to datetime
-                try:
-                    planted_date = datetime.strptime(user_input["planted_date"], "%Y-%m-%d")
-                except ValueError:
-                    errors["planted_date"] = "invalid_date"
-                else:
-                    # Create entry
-                    return self.async_create_entry(
-                        title=user_input["name"],
-                        data={
-                            "name": user_input["name"],
-                            "grow_type": user_input["grow_type"],
-                            "planted_date": planted_date.isoformat(),
-                        },
-                        options={
-                            "current_phase": "germination",
-                            "phase_start_date": planted_date.isoformat(),
-                            "notes": "",
-                            "watering_history": [],
-                            "nutrients_history": []
-                        }
-                    )
+    def __init__(self) -> None:
+        """Initialize config flow."""
+        self._data: dict[str, Any] = {}
+        self._device_type: str | None = None
 
-        # Schema für User Input
-        data_schema = vol.Schema({
-            vol.Required("name"): str,
-            vol.Required("grow_type", default="soil"): vol.In(GROW_TYPES),
-            vol.Required("planted_date", default=datetime.now().strftime("%Y-%m-%d")): str,
-        })
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> GrowFlowOptionsFlow:
+        """Create the options flow."""
+        return GrowFlowOptionsFlow(config_entry)
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle the initial step - choose device type."""
+        if user_input is not None:
+            self._device_type = user_input["device_type"]
+            if self._device_type == "growbox":
+                return await self.async_step_growbox()
+            else:
+                return await self.async_step_plant()
 
         return self.async_show_form(
             step_id="user",
-            data_schema=data_schema,
-            errors=errors,
-            description_placeholders={
-                "grow_types": ", ".join([GROW_TYPE_NAMES[t] for t in GROW_TYPES])
-            }
+            data_schema=STEP_USER_DATA_SCHEMA,
         )
 
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry):
-        """Get options flow."""
-        return GrowFlowOptionsFlowHandler(config_entry)
+    async def async_step_growbox(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle growbox configuration."""
+        errors: dict[str, str] = {}
 
-class GrowFlowOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle GrowFlow options flow."""
+        if user_input is not None:
+            # Prüfen ob Growbox-Name bereits verwendet wird
+            existing_entries = self._async_current_entries()
+            for entry in existing_entries:
+                if entry.data.get(CONF_GROWBOX_NAME) == user_input[CONF_GROWBOX_NAME]:
+                    errors["base"] = "name_exists"
+                    break
 
-    def __init__(self, config_entry: config_entries.ConfigEntry):
+            if not errors:
+                self._data.update(user_input)
+                return await self.async_step_sensors()
+
+        return self.async_show_form(
+            step_id="growbox",
+            data_schema=STEP_GROWBOX_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_plant(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle plant configuration."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            # Prüfen ob Plant-Name bereits verwendet wird
+            existing_entries = self._async_current_entries()
+            for entry in existing_entries:
+                if entry.data.get(CONF_PLANT_NAME) == user_input[CONF_PLANT_NAME]:
+                    errors["base"] = "name_exists"
+                    break
+
+            if not errors:
+                # Verfügbare Growboxen finden
+                available_growboxes = []
+                for entry in existing_entries:
+                    if entry.data.get(CONF_GROWBOX_NAME):
+                        available_growboxes.append(entry.data[CONF_GROWBOX_NAME])
+                
+                if not available_growboxes:
+                    errors["base"] = "no_growboxes"
+                else:
+                    self._data.update(user_input)
+                    return await self.async_step_plant_growbox()
+
+        return self.async_show_form(
+            step_id="plant",
+            data_schema=STEP_PLANT_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_plant_growbox(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle plant growbox assignment."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_plant_sensors()
+
+        # Verfügbare Growboxen finden
+        existing_entries = self._async_current_entries()
+        available_growboxes = []
+        for entry in existing_entries:
+            if entry.data.get(CONF_GROWBOX_NAME):
+                available_growboxes.append(entry.data[CONF_GROWBOX_NAME])
+
+        growbox_schema = vol.Schema({
+            vol.Required(CONF_PLANT_GROWBOX): vol.In(available_growboxes),
+        })
+
+        return self.async_show_form(
+            step_id="plant_growbox",
+            data_schema=growbox_schema,
+        )
+
+    async def async_step_plant_sensors(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle plant sensor configuration."""
+        if user_input is not None:
+            self._data.update(user_input)
+            
+            # Plant Entry erstellen
+            return self.async_create_entry(
+                title=f"{self._data[CONF_PLANT_NAME]} ({self._data[CONF_PLANT_STRAIN]})",
+                data=self._data,
+            )
+
+        return self.async_show_form(
+            step_id="plant_sensors",
+            data_schema=STEP_PLANT_SENSORS_DATA_SCHEMA,
+        )
+
+    async def async_step_sensors(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle growbox sensor configuration step."""
+        if user_input is not None:
+            # Alle Daten zusammenführen
+            self._data.update(user_input)
+            
+            # Growbox Entry erstellen
+            return self.async_create_entry(
+                title=self._data[CONF_GROWBOX_NAME],
+                data=self._data,
+            )
+
+        return self.async_show_form(
+            step_id="sensors",
+            data_schema=STEP_SENSORS_DATA_SCHEMA,
+            description_placeholders={
+                "growbox_name": self._data[CONF_GROWBOX_NAME],
+            },
+        )
+
+
+class GrowFlowOptionsFlow(config_entries.OptionsFlow):
+    """Handle options flow for GrowFlow."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         self.config_entry = config_entry
 
     async def async_step_init(
-        self, user_input: Optional[Dict[str, Any]] = None
+        self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the options."""
-        errors = {}
-        
         if user_input is not None:
-            # Prüfe ob Phase sich geändert hat
-            old_phase = self.config_entry.options.get("current_phase", "germination")
-            new_phase = user_input["current_phase"]
+            # Coordinator über die Änderungen informieren
+            coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id]
+            coordinator.update_config(user_input)
+            await coordinator.async_request_refresh()
             
-            options = dict(self.config_entry.options)
-            options.update(user_input)
-            
-            # Wenn Phase gewechselt hat, update phase_start_date
-            if old_phase != new_phase:
-                options["phase_start_date"] = datetime.now().isoformat()
-                _LOGGER.info(
-                    "Phase changed from %s to %s for %s", 
-                    old_phase, new_phase, self.config_entry.data["name"]
-                )
-            
-            return self.async_create_entry(title="", data=options)
+            return self.async_create_entry(title="", data=user_input)
 
-        # Current values
-        current_phase = self.config_entry.options.get("current_phase", "germination")
-        current_notes = self.config_entry.options.get("notes", "")
+        # Aktuelle Werte als Default verwenden
+        current_data = {**self.config_entry.data, **self.config_entry.options}
         
-        data_schema = vol.Schema({
-            vol.Required("current_phase", default=current_phase): vol.In(GROW_PHASES),
-            vol.Optional("notes", default=current_notes): str,
-        })
+        options_schema = vol.Schema(
+            {
+                vol.Optional(
+                    CONF_TEMPERATURE_ENTITY,
+                    default=current_data.get(CONF_TEMPERATURE_ENTITY),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                ),
+                vol.Optional(
+                    CONF_HUMIDITY_ENTITY,
+                    default=current_data.get(CONF_HUMIDITY_ENTITY),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+                ),
+                vol.Optional(
+                    CONF_HYGROSTAT_ENTITY,
+                    default=current_data.get(CONF_HYGROSTAT_ENTITY),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain=["switch", "fan", "humidifier"])
+                ),
+                vol.Optional(
+                    CONF_TARGET_VPD,
+                    default=current_data.get(CONF_TARGET_VPD, DEFAULT_TARGET_VPD),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.4, max=2.0)),
+            }
+        )
 
         return self.async_show_form(
             step_id="init",
-            data_schema=data_schema,
-            errors=errors,
+            data_schema=options_schema,
             description_placeholders={
-                "current_grow": self.config_entry.data["name"],
-                "grow_type": GROW_TYPE_NAMES[self.config_entry.data["grow_type"]],
-                "phases": ", ".join([PHASE_NAMES[p] for p in GROW_PHASES])
-            }
+                "growbox_name": self.config_entry.data[CONF_GROWBOX_NAME],
+            },
         )
