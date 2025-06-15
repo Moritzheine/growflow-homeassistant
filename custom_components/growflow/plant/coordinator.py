@@ -24,7 +24,8 @@ from ..const import (
     GROWTH_STAGES,
     VEG_PHASES,
     FLOWER_PHASES,
-    LEGACY_PHASE_MAPPING,  # ✅ New: for migration
+    POST_HARVEST_PHASES,  # ✅ NEW: Include post-harvest phases
+    LEGACY_PHASE_MAPPING,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,14 +42,50 @@ class PlantCoordinator(DataUpdateCoordinator):
         self.plant_strain = entry.data.get(CONF_PLANT_STRAIN, "Unknown")
         self.growbox_name = entry.data[CONF_PLANT_GROWBOX]
         
-        # Parse planted date properly
-        planted_date_str = entry.data[CONF_PLANTED_DATE]
-        if isinstance(planted_date_str, str):
-            self.planted_date = dt_util.parse_date(planted_date_str)
-        elif isinstance(planted_date_str, date):
-            self.planted_date = planted_date_str
-        else:
+        # ✅ IMPROVED: More robust planted date parsing
+        planted_date_value = entry.data.get(CONF_PLANTED_DATE)
+        
+        try:
+            if planted_date_value is None or planted_date_value == "":
+                # No date provided, use today
+                self.planted_date = dt_util.now().date()
+                _LOGGER.warning("No planted date provided for %s, using today", self.plant_name)
+            elif isinstance(planted_date_value, date):
+                # Already a date object
+                self.planted_date = planted_date_value
+            elif isinstance(planted_date_value, str):
+                # String date, try to parse
+                if planted_date_value.strip() == "":
+                    self.planted_date = dt_util.now().date()
+                    _LOGGER.warning("Empty planted date string for %s, using today", self.plant_name)
+                else:
+                    parsed_date = dt_util.parse_date(planted_date_value)
+                    if parsed_date:
+                        self.planted_date = parsed_date
+                    else:
+                        self.planted_date = dt_util.now().date()
+                        _LOGGER.error("Could not parse planted date '%s' for %s, using today", 
+                                    planted_date_value, self.plant_name)
+            else:
+                # Unknown type, use fallback
+                self.planted_date = dt_util.now().date()
+                _LOGGER.error("Invalid planted date type %s for %s, using today", 
+                            type(planted_date_value), self.plant_name)
+        except Exception as e:
+            # Catch any parsing errors
             self.planted_date = dt_util.now().date()
+            _LOGGER.error("Error parsing planted date for %s: %s, using today", 
+                        self.plant_name, str(e))
+        
+        # ✅ IMPROVED: Validate the final date is reasonable
+        today = dt_util.now().date()
+        if self.planted_date > today:
+            _LOGGER.warning("Planted date %s is in future for %s, using today", 
+                          self.planted_date, self.plant_name)
+            self.planted_date = today
+        elif (today - self.planted_date).days > 365:
+            _LOGGER.warning("Planted date %s is over a year ago for %s, might be incorrect", 
+                          self.planted_date, self.plant_name)
         
         self.growth_stage = entry.options.get(
             CONF_GROWTH_STAGE, 
@@ -58,11 +95,11 @@ class PlantCoordinator(DataUpdateCoordinator):
         # State history as simple array in config entry options
         self.state_history = entry.options.get("state_history", [])
         
-        # ✅ NEW: Watering history system
+        # Watering history system
         self.watering_history = entry.options.get("watering_history", [])
         self.default_water_volume = entry.options.get("default_water_volume", DEFAULT_WATER_VOLUME)
         
-        # ✅ NEW: Migrate legacy phases in state history
+        # ✅ IMPROVED: Migrate legacy phases in state history
         self._migrate_legacy_phases()
         
         # Initialize if empty
@@ -73,7 +110,7 @@ class PlantCoordinator(DataUpdateCoordinator):
             }]
             self._save_state_history()
         
-        # ✅ NEW: Migrate current growth stage if it's legacy
+        # ✅ IMPROVED: Migrate current growth stage if it's legacy
         if self.growth_stage in LEGACY_PHASE_MAPPING:
             old_stage = self.growth_stage
             self.growth_stage = LEGACY_PHASE_MAPPING[old_stage]
@@ -100,7 +137,7 @@ class PlantCoordinator(DataUpdateCoordinator):
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
 
     def _migrate_legacy_phases(self) -> None:
-        """Migrate legacy phase names in state history to new combined phases."""
+        """Migrate legacy phase names in state history to new phases."""
         if not self.state_history:
             return
         
@@ -144,7 +181,7 @@ class PlantCoordinator(DataUpdateCoordinator):
         total_days = 0
         current_phase_start = None
         
-        # ✅ NEW: Handle combined phases by checking for both old and new phase names
+        # Handle combined phases by checking for both old and new phase names
         phases_to_check = [target_phase]
         
         # For combined phases, also check legacy phases
@@ -175,7 +212,6 @@ class PlantCoordinator(DataUpdateCoordinator):
 
     def _calculate_days_in_current_phase(self) -> int:
         """Calculate days in current phase."""
-        # ✅ NEW: Handle combined phases for current phase calculation
         phases_to_check = [self.growth_stage]
         
         # For combined phases, also check legacy phases
@@ -207,7 +243,13 @@ class PlantCoordinator(DataUpdateCoordinator):
             total += self._calculate_days_in_phase(phase)
         return total
 
-    # ✅ NEW: Watering calculation methods
+    def _calculate_total_post_harvest_days(self) -> int:
+        """Calculate total days in post-harvest phases (drying + curing)."""
+        total = 0
+        for phase in POST_HARVEST_PHASES:
+            total += self._calculate_days_in_phase(phase)
+        return total
+
     def _get_last_watering(self) -> datetime | None:
         """Get timestamp of last watering."""
         if not self.watering_history:
@@ -216,7 +258,6 @@ class PlantCoordinator(DataUpdateCoordinator):
         last_entry = self.watering_history[-1]
         timestamp_str = last_entry["timestamp"]
         
-        # ✅ Ensure we return a proper datetime object
         try:
             return dt_util.parse_datetime(timestamp_str)
         except (ValueError, TypeError) as e:
@@ -229,7 +270,6 @@ class PlantCoordinator(DataUpdateCoordinator):
         if not last_watering:
             return None
         
-        # ✅ Ensure we have a proper datetime object
         try:
             return (dt_util.now() - last_watering).days
         except (TypeError, AttributeError) as e:
@@ -315,8 +355,9 @@ class PlantCoordinator(DataUpdateCoordinator):
             # Calculate totals
             total_veg_days = self._calculate_total_veg_days()
             total_flower_days = self._calculate_total_flower_days()
+            total_post_harvest_days = self._calculate_total_post_harvest_days()  # ✅ NEW
             
-            # ✅ NEW: Watering calculations
+            # Watering calculations
             last_watering = self._get_last_watering()
             days_since_watering = self._calculate_days_since_watering()
             water_this_week = self._calculate_water_this_week()
@@ -333,7 +374,8 @@ class PlantCoordinator(DataUpdateCoordinator):
                 "days_in_current_phase": days_in_current_phase,
                 "total_veg_days": total_veg_days,
                 "total_flower_days": total_flower_days,
-                # ✅ NEW: Watering data
+                "total_post_harvest_days": total_post_harvest_days,  # ✅ NEW
+                # Watering data
                 "default_water_volume": self.default_water_volume,
                 "last_watering": last_watering,
                 "days_since_watering": days_since_watering,
@@ -411,7 +453,7 @@ class PlantCoordinator(DataUpdateCoordinator):
         """Get the complete state history."""
         return self.state_history.copy()
 
-    # ✅ NEW: Watering system methods
+    # Watering system methods
     async def async_add_watering_entry(self, volume_ml: int, notes: str | None = None) -> None:
         """Add watering entry to history."""
         entry = {

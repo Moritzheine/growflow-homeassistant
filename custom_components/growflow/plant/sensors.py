@@ -130,6 +130,7 @@ class PlantDaysSincePlantedSensor(PlantSensorBase):
             "strain": self.coordinator.plant_strain,
             "total_veg_days": self.coordinator.data.get("total_veg_days"),
             "total_flower_days": self.coordinator.data.get("total_flower_days"),
+            "total_post_harvest_days": self.coordinator.data.get("total_post_harvest_days"),  # ✅ NEW
         }
 
 
@@ -152,11 +153,12 @@ class PlantPhaseBaseSensor(PlantSensorBase):
         """Get icon for phase."""
         icons = {
             "early_veg": "mdi:sprout",
-            "mid_late_veg": "mdi:leaf-circle",  # ✅ New combined icon
+            "mid_late_veg": "mdi:leaf-circle",
             "early_flower": "mdi:flower",
-            "mid_late_flower": "mdi:flower-tulip-outline",  # ✅ New combined icon
+            "mid_late_flower": "mdi:flower-tulip-outline",
             "flushing": "mdi:water-sync",
-            "done": "mdi:check-circle",
+            "drying": "mdi:air-filter",      # ✅ NEW: Drying icon
+            "curing": "mdi:package-variant", # ✅ NEW: Curing icon
         }
         return icons.get(phase, "mdi:calendar")
 
@@ -194,7 +196,7 @@ class PlantLastWateringSensor(PlantSensorBase):
     def native_value(self) -> datetime | None:
         """Return last watering timestamp as datetime object."""
         last_watering = self.coordinator.data.get("last_watering")
-        return last_watering  # ✅ Return datetime object directly, not ISO string
+        return last_watering
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -369,6 +371,7 @@ class PlantWateringDebugSensor(PlantSensorBase):
         }
 
 
+# ✅ UPDATED: Individual Phase Sensors with new phases
 class PlantEarlyVegSensor(PlantPhaseBaseSensor):
     """Early veg days sensor."""
     def __init__(self, coordinator: PlantCoordinator) -> None:
@@ -399,6 +402,19 @@ class PlantFlushingSensor(PlantPhaseBaseSensor):
         super().__init__(coordinator, "flushing")
 
 
+# ✅ NEW: Drying and Curing phase sensors
+class PlantDryingSensor(PlantPhaseBaseSensor):
+    """Drying days sensor."""
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        super().__init__(coordinator, "drying")
+
+
+class PlantCuringSensor(PlantPhaseBaseSensor):
+    """Curing days sensor."""
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        super().__init__(coordinator, "curing")
+
+
 # Summary Sensors (History-based)
 class PlantTotalVegDaysSensor(PlantSensorBase):
     """Total vegetative days sensor from history."""
@@ -423,8 +439,7 @@ class PlantTotalVegDaysSensor(PlantSensorBase):
         data = self.coordinator.data
         return {
             "early_veg_days": data.get("days_in_early_veg", 0),
-            "mid_veg_days": data.get("days_in_mid_veg", 0),
-            "late_veg_days": data.get("days_in_late_veg", 0),
+            "mid_late_veg_days": data.get("days_in_mid_late_veg", 0),
             "strain": self.coordinator.plant_strain,
             "calculation_method": "history_based",
         }
@@ -453,9 +468,38 @@ class PlantTotalFlowerDaysSensor(PlantSensorBase):
         data = self.coordinator.data
         return {
             "early_flower_days": data.get("days_in_early_flower", 0),
-            "mid_flower_days": data.get("days_in_mid_flower", 0),
-            "late_flower_days": data.get("days_in_late_flower", 0),
+            "mid_late_flower_days": data.get("days_in_mid_late_flower", 0),
             "flushing_days": data.get("days_in_flushing", 0),
+            "strain": self.coordinator.plant_strain,
+            "calculation_method": "history_based",
+        }
+
+
+# ✅ NEW: Post-harvest summary sensor
+class PlantTotalPostHarvestDaysSensor(PlantSensorBase):
+    """Total post-harvest days sensor (drying + curing)."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize total post-harvest days sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_total_post_harvest_days"
+        self._attr_name = f"{coordinator.plant_name} Nach-Ernte Tage (Gesamt)"
+        self._attr_native_unit_of_measurement = UNIT_DAYS
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_icon = "mdi:package-check"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return total post-harvest days from history calculations."""
+        return self.coordinator.data.get("total_post_harvest_days", 0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        data = self.coordinator.data
+        return {
+            "drying_days": data.get("days_in_drying", 0),
+            "curing_days": data.get("days_in_curing", 0),
             "strain": self.coordinator.plant_strain,
             "calculation_method": "history_based",
         }

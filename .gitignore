@@ -62,3 +62,5 @@ npm-debug.log*
 
 # Logs
 *.log
+scripts/
+growflow_integration_

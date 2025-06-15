@@ -27,8 +27,10 @@ change_phase:
               value: mid_late_flower
             - label: Flushing
               value: flushing
-            - label: Done
-              value: done
+            - label: Drying
+              value: drying
+            - label: Curing
+              value: curing
     notes:
       name: Notizen (optional)
       description: Notizen zum Phasenwechsel
@@ -57,7 +59,7 @@ add_note:
       selector:
         text:
 
-# ✅ NEW: Watering Services
+# Watering Services
 water_plant:
   name: Pflanze gießen
   description: Pflanze mit angegebener Wassermenge gießen

@@ -44,15 +44,6 @@
           "hygrostat_entity": "Hygrostat/Befeuchter (optional)",
           "target_vpd": "Ziel-VPD Wert (kPa)"
         }
-      },
-      "plant_sensors": {
-        "title": "Pflanzensensoren zuweisen",
-        "description": "Weise deiner Pflanze Sensoren zu",
-        "data": {
-          "soil_moisture_entity": "Bodenfeuchtigkeitssensor (optional)",
-          "ec_entity": "EC-Sensor (optional)",
-          "ph_entity": "pH-Sensor (optional)"
-        }
       }
     },
     "error": {
@@ -60,13 +51,14 @@
       "no_growboxes": "Keine Growboxen verfügbar. Erstelle zuerst eine Growbox."
     },
     "abort": {
-      "already_configured": "Diese Growbox ist bereits konfiguriert"
+      "already_configured": "Diese Growbox ist bereits konfiguriert",
+      "not_supported": "Konfiguration für diesen Gerätetyp nicht verfügbar"
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Growbox '{growbox_name}' konfigurieren",
+        "title": "Growbox '{device_name}' konfigurieren",
         "description": "Ändere die Sensoren und Einstellungen für deine Growbox",
         "data": {
           "temperature_entity": "Temperatursensor (optional)",
@@ -74,6 +66,19 @@
           "hygrostat_entity": "Hygrostat/Befeuchter (optional)",
           "target_vpd": "Ziel-VPD Wert (kPa)"
         }
+      }
+    }
+  },
+  "selector": {
+    "growth_stage": {
+      "options": {
+        "early_veg": "Early Veg",
+        "mid_late_veg": "Mid Late Veg",
+        "early_flower": "Early Flower",
+        "mid_late_flower": "Mid Late Flower",
+        "flushing": "Flushing",
+        "drying": "Trocknung",
+        "curing": "Aushärtung"
       }
     }
   }

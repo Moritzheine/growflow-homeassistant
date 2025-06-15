@@ -55,49 +55,53 @@ CONF_GROWTH_STAGE = "growth_stage"
 CONF_DEFAULT_WATER_VOLUME = "default_water_volume"
 DEFAULT_WATER_VOLUME = 2000  # 2 Liter in ml
 
-# New Growth stages (simplified - 6 phases)
+# ✅ UPDATED: Growth stages with Drying and Curing instead of Done
 GROWTH_STAGE_EARLY_VEG = "early_veg"
-GROWTH_STAGE_MID_LATE_VEG = "mid_late_veg"  # ✅ Combined mid + late veg
+GROWTH_STAGE_MID_LATE_VEG = "mid_late_veg"
 GROWTH_STAGE_EARLY_FLOWER = "early_flower"
-GROWTH_STAGE_MID_LATE_FLOWER = "mid_late_flower"  # ✅ Combined mid + late flower
+GROWTH_STAGE_MID_LATE_FLOWER = "mid_late_flower"
 GROWTH_STAGE_FLUSHING = "flushing"
-GROWTH_STAGE_DONE = "done"
+GROWTH_STAGE_DRYING = "drying"
+GROWTH_STAGE_CURING = "curing"
 
-# Growth stage labels for UI
+# ✅ UPDATED: Growth stage labels for UI
 GROWTH_STAGE_LABELS = {
     GROWTH_STAGE_EARLY_VEG: "Early Veg",
-    GROWTH_STAGE_MID_LATE_VEG: "Mid Late Veg",  # ✅ New combined label
+    GROWTH_STAGE_MID_LATE_VEG: "Mid Late Veg",
     GROWTH_STAGE_EARLY_FLOWER: "Early Flower",
-    GROWTH_STAGE_MID_LATE_FLOWER: "Mid Late Flower",  # ✅ New combined label
+    GROWTH_STAGE_MID_LATE_FLOWER: "Mid Late Flower",
     GROWTH_STAGE_FLUSHING: "Flushing",
-    GROWTH_STAGE_DONE: "Done",
+    GROWTH_STAGE_DRYING: "Drying",
+    GROWTH_STAGE_CURING: "Curing",
 }
 
+# ✅ UPDATED: Growth stages list
 GROWTH_STAGES = [
     GROWTH_STAGE_EARLY_VEG,
-    GROWTH_STAGE_MID_LATE_VEG,  # ✅ New combined stage
+    GROWTH_STAGE_MID_LATE_VEG,
     GROWTH_STAGE_EARLY_FLOWER,
-    GROWTH_STAGE_MID_LATE_FLOWER,  # ✅ New combined stage
+    GROWTH_STAGE_MID_LATE_FLOWER,
     GROWTH_STAGE_FLUSHING,
-    GROWTH_STAGE_DONE,
+    GROWTH_STAGE_DRYING, 
+    GROWTH_STAGE_CURING, 
 ]
 
 # Legacy growth stages (for backward compatibility) 
 GROWTH_STAGE_SEEDLING = "early_veg"  # Map to new system
 GROWTH_STAGE_VEGETATIVE = "mid_late_veg"  # Map to combined veg phase
 GROWTH_STAGE_FLOWERING = "early_flower"
-GROWTH_STAGE_HARVEST = "done"
+GROWTH_STAGE_HARVEST = "drying"  # ✅ UPDATED: Map old harvest to drying
+GROWTH_STAGE_DONE = "curing"     # ✅ UPDATED: Map old done to curing
 
-# Legacy mapping for migration (old -> new)
+# ✅ UPDATED: Legacy mapping for migration (old -> new)
 LEGACY_PHASE_MAPPING = {
-    "mid_veg": "mid_late_veg",     # ✅ Map old mid_veg to new combined
-    "late_veg": "mid_late_veg",    # ✅ Map old late_veg to new combined
-    "mid_flower": "mid_late_flower", # ✅ Map old mid_flower to new combined
-    "late_flower": "mid_late_flower", # ✅ Map old late_flower to new combined
+    "mid_veg": "mid_late_veg",
+    "late_veg": "mid_late_veg",
+    "mid_flower": "mid_late_flower",
+    "late_flower": "mid_late_flower",
+    "done": "curing",      
+    "harvest": "drying",   
 }
-
-# Plant device classes (not used anymore)
-# PLANT_DEVICE_CLASS_MOISTURE = "moisture"
 
 # Plant units (simplified)
 UNIT_DAYS = "days"
@@ -116,6 +120,7 @@ ATTR_CURRENT_PHASE_START = "current_phase_start"
 ATTR_TOTAL_VEG_DAYS = "total_veg_days"
 ATTR_TOTAL_FLOWER_DAYS = "total_flower_days"
 
-# Vegetative and flowering phase lists (simplified)
-VEG_PHASES = [GROWTH_STAGE_EARLY_VEG, GROWTH_STAGE_MID_LATE_VEG]  # ✅ Only 2 veg phases now
-FLOWER_PHASES = [GROWTH_STAGE_EARLY_FLOWER, GROWTH_STAGE_MID_LATE_FLOWER, GROWTH_STAGE_FLUSHING]  # ✅ Only 3 flower phases now
+# ✅ UPDATED: Phase categorization with new phases
+VEG_PHASES = [GROWTH_STAGE_EARLY_VEG, GROWTH_STAGE_MID_LATE_VEG]
+FLOWER_PHASES = [GROWTH_STAGE_EARLY_FLOWER, GROWTH_STAGE_MID_LATE_FLOWER, GROWTH_STAGE_FLUSHING]
+POST_HARVEST_PHASES = [GROWTH_STAGE_DRYING, GROWTH_STAGE_CURING]

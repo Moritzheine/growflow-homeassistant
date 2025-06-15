@@ -17,15 +17,18 @@ from .growbox.sensors import (
 )
 from .plant.coordinator import PlantCoordinator
 from .plant.sensors import (
-    # Phase tracking sensors (simplified - 6 phases)
+    # Phase tracking sensors (updated with new phases)
     PlantDaysInCurrentPhaseSensor,
     PlantEarlyVegSensor,
-    PlantMidLateVegSensor,  # ✅ New combined sensor
+    PlantMidLateVegSensor,
     PlantEarlyFlowerSensor,
-    PlantMidLateFlowerSensor,  # ✅ New combined sensor
+    PlantMidLateFlowerSensor,
     PlantFlushingSensor,
+    PlantDryingSensor,         # ✅ NEW: Drying phase sensor
+    PlantCuringSensor,         # ✅ NEW: Curing phase sensor
     PlantTotalVegDaysSensor,
     PlantTotalFlowerDaysSensor,
+    PlantTotalPostHarvestDaysSensor,  # ✅ NEW: Post-harvest summary
     PlantDaysSincePlantedSensor,
     PlantHistoryDebugSensor,
     # Watering sensors
@@ -57,24 +60,27 @@ async def async_setup_entry(
             GrowboxTargetHumiditySensor(coordinator),
         ]
     elif isinstance(coordinator, PlantCoordinator):
-        # Plant Sensoren (Phase-Tracking + Watering) - 6 phases only
+        # ✅ UPDATED: Plant Sensoren with new phases (Drying and Curing)
         sensors = [
             # Basic sensors
             PlantDaysSincePlantedSensor(coordinator),
             
-            # Phase tracking sensors (simplified)
+            # Phase tracking sensors
             PlantDaysInCurrentPhaseSensor(coordinator),
             
-            # Individual phase sensors (6 phases only)
+            # Individual phase sensors (7 phases total)
             PlantEarlyVegSensor(coordinator),
-            PlantMidLateVegSensor(coordinator),  # ✅ Combined mid+late veg
+            PlantMidLateVegSensor(coordinator),
             PlantEarlyFlowerSensor(coordinator),
-            PlantMidLateFlowerSensor(coordinator),  # ✅ Combined mid+late flower
+            PlantMidLateFlowerSensor(coordinator),
             PlantFlushingSensor(coordinator),
+            PlantDryingSensor(coordinator),         # ✅ NEW
+            PlantCuringSensor(coordinator),         # ✅ NEW
             
             # Summary sensors
             PlantTotalVegDaysSensor(coordinator),
             PlantTotalFlowerDaysSensor(coordinator),
+            PlantTotalPostHarvestDaysSensor(coordinator),  # ✅ NEW
             
             # Watering sensors
             PlantLastWateringSensor(coordinator),

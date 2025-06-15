@@ -15,6 +15,7 @@ from ..const import (
     CONF_GROWBOX_NAME,
     CONF_TEMPERATURE_ENTITY,
     CONF_HUMIDITY_ENTITY,
+    CONF_HYGROSTAT_ENTITY,
     CONF_TARGET_VPD,
     DEFAULT_TARGET_VPD,
 )
@@ -31,9 +32,17 @@ class GrowboxCoordinator(DataUpdateCoordinator):
         self.hass = hass
         self.entry = entry
         self.growbox_name = entry.data[CONF_GROWBOX_NAME]
-        self.temperature_entity = entry.data.get(CONF_TEMPERATURE_ENTITY)
-        self.humidity_entity = entry.data.get(CONF_HUMIDITY_ENTITY)
-        self.target_vpd = entry.options.get(CONF_TARGET_VPD, entry.data.get(CONF_TARGET_VPD, DEFAULT_TARGET_VPD))
+        
+        # Load entity config with proper priority (options override data)
+        def get_entity_config(key):
+            if key in entry.options:
+                return entry.options[key]  # Could be None if cleared
+            return entry.data.get(key)  # Fallback to original data
+        
+        self.temperature_entity = get_entity_config(CONF_TEMPERATURE_ENTITY)
+        self.humidity_entity = get_entity_config(CONF_HUMIDITY_ENTITY)
+        self.hygrostat_entity = get_entity_config(CONF_HYGROSTAT_ENTITY)
+        self.target_vpd = entry.data.get(CONF_TARGET_VPD, DEFAULT_TARGET_VPD)
         
         super().__init__(
             hass,
@@ -45,24 +54,19 @@ class GrowboxCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data from sensors."""
         try:
-            # Temperatur von echtem Sensor oder Mock
             if self.temperature_entity:
                 temp_state = self.hass.states.get(self.temperature_entity)
                 temperature = float(temp_state.state) if temp_state and temp_state.state != "unavailable" else 24.5
             else:
-                temperature = 24.5  # Mock-Wert
+                temperature = 24.5
             
-            # Feuchtigkeit von echtem Sensor oder Mock
             if self.humidity_entity:
                 humid_state = self.hass.states.get(self.humidity_entity)
                 humidity = float(humid_state.state) if humid_state and humid_state.state != "unavailable" else 65.0
             else:
-                humidity = 65.0  # Mock-Wert
+                humidity = 65.0
             
-            # VPD berechnen
             vpd = calculate_vpd(temperature, humidity)
-            
-            # Ziel-Feuchtigkeit basierend auf Ziel-VPD berechnen
             target_humidity = calculate_target_humidity(temperature, self.target_vpd)
             
             data = {
@@ -83,15 +87,28 @@ class GrowboxCoordinator(DataUpdateCoordinator):
     async def async_set_target_vpd(self, target_vpd: float) -> None:
         """Set target VPD value."""
         self.target_vpd = target_vpd
-        # In options speichern
         new_options = dict(self.entry.options)
         new_options[CONF_TARGET_VPD] = target_vpd
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
-        # Sofortiges Update der Daten triggern
         await self.async_request_refresh()
 
     def update_config(self, config_data: dict[str, Any]) -> None:
         """Update configuration from options flow."""
-        self.temperature_entity = config_data.get(CONF_TEMPERATURE_ENTITY)
-        self.humidity_entity = config_data.get(CONF_HUMIDITY_ENTITY)
-        self.target_vpd = config_data.get(CONF_TARGET_VPD, DEFAULT_TARGET_VPD)
+        # Update coordinator attributes with new values (including None for cleared entities)
+        if CONF_TEMPERATURE_ENTITY in config_data:
+            self.temperature_entity = self._clean_entity_value(config_data[CONF_TEMPERATURE_ENTITY])
+        if CONF_HUMIDITY_ENTITY in config_data:
+            self.humidity_entity = self._clean_entity_value(config_data[CONF_HUMIDITY_ENTITY])
+        if CONF_HYGROSTAT_ENTITY in config_data:
+            self.hygrostat_entity = self._clean_entity_value(config_data[CONF_HYGROSTAT_ENTITY])
+        
+    def _clean_entity_value(self, value: Any) -> str | None:
+        """Clean entity value, return None for empty/invalid values."""
+        if value is None or value == "" or value == "None":
+            return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped == "" or stripped.lower() == "none":
+                return None
+            return stripped
+        return str(value) if value else None
