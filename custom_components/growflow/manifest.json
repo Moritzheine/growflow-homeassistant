@@ -1,6 +1,6 @@
 {
     "domain": "growflow",
-    "name": "GrowFlow",
+    "name": "GrowFlow - Cannabis Plant Tracker",
     "codeowners": [
         "@moritzheine"
     ],
@@ -9,6 +9,9 @@
     "documentation": "https://github.com/moritzheine/growflow-homeassistant",
     "integration_type": "device",
     "iot_class": "local_polling",
+    "issue_tracker": "https://github.com/moritzheine/growflow-homeassistant/issues",
     "requirements": [],
-    "version": "0.1.0"
+    "version": "1.0.0",
+    "hacs": "1.32.0",
+    "homeassistant": "2024.6.0"
 }

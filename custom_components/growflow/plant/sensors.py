@@ -152,11 +152,9 @@ class PlantPhaseBaseSensor(PlantSensorBase):
         """Get icon for phase."""
         icons = {
             "early_veg": "mdi:sprout",
-            "mid_veg": "mdi:leaf",
-            "late_veg": "mdi:tree",
+            "mid_late_veg": "mdi:leaf-circle",  # ✅ New combined icon
             "early_flower": "mdi:flower",
-            "mid_flower": "mdi:flower-outline",
-            "late_flower": "mdi:flower-tulip",
+            "mid_late_flower": "mdi:flower-tulip-outline",  # ✅ New combined icon
             "flushing": "mdi:water-sync",
             "done": "mdi:check-circle",
         }
@@ -371,23 +369,16 @@ class PlantWateringDebugSensor(PlantSensorBase):
         }
 
 
-# Create sensors for each phase
 class PlantEarlyVegSensor(PlantPhaseBaseSensor):
     """Early veg days sensor."""
     def __init__(self, coordinator: PlantCoordinator) -> None:
         super().__init__(coordinator, "early_veg")
 
 
-class PlantMidVegSensor(PlantPhaseBaseSensor):
-    """Mid veg days sensor."""
+class PlantMidLateVegSensor(PlantPhaseBaseSensor):
+    """Mid Late VEG days sensor (combined)."""
     def __init__(self, coordinator: PlantCoordinator) -> None:
-        super().__init__(coordinator, "mid_veg")
-
-
-class PlantLateVegSensor(PlantPhaseBaseSensor):
-    """Late veg days sensor."""
-    def __init__(self, coordinator: PlantCoordinator) -> None:
-        super().__init__(coordinator, "late_veg")
+        super().__init__(coordinator, "mid_late_veg")
 
 
 class PlantEarlyFlowerSensor(PlantPhaseBaseSensor):
@@ -396,16 +387,10 @@ class PlantEarlyFlowerSensor(PlantPhaseBaseSensor):
         super().__init__(coordinator, "early_flower")
 
 
-class PlantMidFlowerSensor(PlantPhaseBaseSensor):
-    """Mid flower days sensor."""
+class PlantMidLateFlowerSensor(PlantPhaseBaseSensor):
+    """Mid Late Flower days sensor (combined)."""
     def __init__(self, coordinator: PlantCoordinator) -> None:
-        super().__init__(coordinator, "mid_flower")
-
-
-class PlantLateFlowerSensor(PlantPhaseBaseSensor):
-    """Late flower days sensor."""
-    def __init__(self, coordinator: PlantCoordinator) -> None:
-        super().__init__(coordinator, "late_flower")
+        super().__init__(coordinator, "mid_late_flower")
 
 
 class PlantFlushingSensor(PlantPhaseBaseSensor):

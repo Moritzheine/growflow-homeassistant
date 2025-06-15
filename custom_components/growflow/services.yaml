@@ -19,19 +19,15 @@ change_phase:
           options:
             - label: Early Veg
               value: early_veg
-            - label: Mid Veg
-              value: mid_veg
-            - label: Late Veg
-              value: late_veg
+            - label: Mid Late VEG
+              value: mid_late_veg
             - label: Early Flower
               value: early_flower
-            - label: Mid Flower
-              value: mid_flower
-            - label: Late Flower
-              value: late_flower
+            - label: Mid Late Flower
+              value: mid_late_flower
             - label: Flushing
               value: flushing
-            - label: Ernte/Fertig
+            - label: Done
               value: done
     notes:
       name: Notizen (optional)

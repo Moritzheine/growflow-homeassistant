@@ -17,20 +17,18 @@ from .growbox.sensors import (
 )
 from .plant.coordinator import PlantCoordinator
 from .plant.sensors import (
-    # Phase tracking sensors
+    # Phase tracking sensors (simplified - 6 phases)
     PlantDaysInCurrentPhaseSensor,
     PlantEarlyVegSensor,
-    PlantMidVegSensor,
-    PlantLateVegSensor,
+    PlantMidLateVegSensor,  # ✅ New combined sensor
     PlantEarlyFlowerSensor,
-    PlantMidFlowerSensor,
-    PlantLateFlowerSensor,
+    PlantMidLateFlowerSensor,  # ✅ New combined sensor
     PlantFlushingSensor,
     PlantTotalVegDaysSensor,
     PlantTotalFlowerDaysSensor,
     PlantDaysSincePlantedSensor,
     PlantHistoryDebugSensor,
-    # ✅ NEW: Watering sensors
+    # Watering sensors
     PlantLastWateringSensor,
     PlantDaysSinceWateringSensor,
     PlantWaterThisWeekSensor,
@@ -59,28 +57,26 @@ async def async_setup_entry(
             GrowboxTargetHumiditySensor(coordinator),
         ]
     elif isinstance(coordinator, PlantCoordinator):
-        # Plant Sensoren (Phase-Tracking + Watering)
+        # Plant Sensoren (Phase-Tracking + Watering) - 6 phases only
         sensors = [
             # Basic sensors
             PlantDaysSincePlantedSensor(coordinator),
             
-            # Phase tracking sensors
+            # Phase tracking sensors (simplified)
             PlantDaysInCurrentPhaseSensor(coordinator),
             
-            # Individual phase sensors
+            # Individual phase sensors (6 phases only)
             PlantEarlyVegSensor(coordinator),
-            PlantMidVegSensor(coordinator),
-            PlantLateVegSensor(coordinator),
+            PlantMidLateVegSensor(coordinator),  # ✅ Combined mid+late veg
             PlantEarlyFlowerSensor(coordinator),
-            PlantMidFlowerSensor(coordinator),
-            PlantLateFlowerSensor(coordinator),
+            PlantMidLateFlowerSensor(coordinator),  # ✅ Combined mid+late flower
             PlantFlushingSensor(coordinator),
             
             # Summary sensors
             PlantTotalVegDaysSensor(coordinator),
             PlantTotalFlowerDaysSensor(coordinator),
             
-            # ✅ NEW: Watering sensors
+            # Watering sensors
             PlantLastWateringSensor(coordinator),
             PlantDaysSinceWateringSensor(coordinator),
             PlantWaterThisWeekSensor(coordinator),

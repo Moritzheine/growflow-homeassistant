@@ -24,6 +24,7 @@ from ..const import (
     GROWTH_STAGES,
     VEG_PHASES,
     FLOWER_PHASES,
+    LEGACY_PHASE_MAPPING,  # ✅ New: for migration
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,6 +62,9 @@ class PlantCoordinator(DataUpdateCoordinator):
         self.watering_history = entry.options.get("watering_history", [])
         self.default_water_volume = entry.options.get("default_water_volume", DEFAULT_WATER_VOLUME)
         
+        # ✅ NEW: Migrate legacy phases in state history
+        self._migrate_legacy_phases()
+        
         # Initialize if empty
         if not self.state_history:
             self.state_history = [{
@@ -68,6 +72,12 @@ class PlantCoordinator(DataUpdateCoordinator):
                 "stage": self.growth_stage
             }]
             self._save_state_history()
+        
+        # ✅ NEW: Migrate current growth stage if it's legacy
+        if self.growth_stage in LEGACY_PHASE_MAPPING:
+            old_stage = self.growth_stage
+            self.growth_stage = LEGACY_PHASE_MAPPING[old_stage]
+            _LOGGER.info("Migrated growth stage from %s to %s", old_stage, self.growth_stage)
         
         # Generate consistent entity IDs
         self.plant_id = self.plant_name.lower().replace(" ", "_")
@@ -89,16 +99,65 @@ class PlantCoordinator(DataUpdateCoordinator):
         new_options[CONF_GROWTH_STAGE] = self.growth_stage
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
 
+    def _migrate_legacy_phases(self) -> None:
+        """Migrate legacy phase names in state history to new combined phases."""
+        if not self.state_history:
+            return
+        
+        migrated = False
+        for entry in self.state_history:
+            old_stage = entry.get("stage")
+            if old_stage in LEGACY_PHASE_MAPPING:
+                new_stage = LEGACY_PHASE_MAPPING[old_stage]
+                entry["stage"] = new_stage
+                migrated = True
+                _LOGGER.info("Migrated phase %s to %s in state history", old_stage, new_stage)
+        
+        if migrated:
+            # Consolidate consecutive entries with same phase
+            self._consolidate_consecutive_phases()
+            _LOGGER.info("Completed legacy phase migration for %s", self.plant_name)
+
+    def _consolidate_consecutive_phases(self) -> None:
+        """Consolidate consecutive state history entries with the same phase."""
+        if len(self.state_history) <= 1:
+            return
+        
+        consolidated = [self.state_history[0]]  # Keep first entry
+        
+        for entry in self.state_history[1:]:
+            last_entry = consolidated[-1]
+            if entry["stage"] == last_entry["stage"]:
+                # Same phase as previous - skip this entry (keeps earliest date)
+                continue
+            else:
+                # Different phase - add to consolidated list
+                consolidated.append(entry)
+        
+        if len(consolidated) != len(self.state_history):
+            self.state_history = consolidated
+            _LOGGER.info("Consolidated %d duplicate phase entries", 
+                        len(self.state_history) - len(consolidated))
+
     def _calculate_days_in_phase(self, target_phase: str) -> int:
         """Calculate days in a specific phase from state history array."""
         total_days = 0
         current_phase_start = None
         
+        # ✅ NEW: Handle combined phases by checking for both old and new phase names
+        phases_to_check = [target_phase]
+        
+        # For combined phases, also check legacy phases
+        if target_phase == "mid_late_veg":
+            phases_to_check.extend(["mid_veg", "late_veg"])
+        elif target_phase == "mid_late_flower":
+            phases_to_check.extend(["mid_flower", "late_flower"])
+        
         for entry in self.state_history:
             entry_date = dt_util.parse_date(entry["date"])
             entry_stage = entry["stage"]
             
-            if entry_stage == target_phase:
+            if entry_stage in phases_to_check:
                 # Phase starts
                 if current_phase_start is None:
                     current_phase_start = entry_date
@@ -116,9 +175,18 @@ class PlantCoordinator(DataUpdateCoordinator):
 
     def _calculate_days_in_current_phase(self) -> int:
         """Calculate days in current phase."""
-        # Find the last entry with current stage
+        # ✅ NEW: Handle combined phases for current phase calculation
+        phases_to_check = [self.growth_stage]
+        
+        # For combined phases, also check legacy phases
+        if self.growth_stage == "mid_late_veg":
+            phases_to_check.extend(["mid_veg", "late_veg"])
+        elif self.growth_stage == "mid_late_flower":
+            phases_to_check.extend(["mid_flower", "late_flower"])
+        
+        # Find the last entry with current stage (or legacy equivalent)
         for entry in reversed(self.state_history):
-            if entry["stage"] == self.growth_stage:
+            if entry["stage"] in phases_to_check:
                 start_date = dt_util.parse_date(entry["date"])
                 return (dt_util.now().date() - start_date).days
         
