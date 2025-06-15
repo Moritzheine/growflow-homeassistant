@@ -28,5 +28,6 @@ async def async_setup_entry(
             PlantGrowthPhaseSelect(coordinator),
         ]
         async_add_entities(entities)
+        _LOGGER.info("Added select entities for plant: %s", coordinator.plant_name)
     else:
         _LOGGER.debug("No select entities for coordinator type: %s", type(coordinator))

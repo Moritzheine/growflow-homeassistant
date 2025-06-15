@@ -21,7 +21,7 @@ class PlantDateBase(CoordinatorEntity, DateEntity):
         """Initialize the date entity."""
         super().__init__(coordinator)
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"plant_{coordinator.plant_name}")},
+            "identifiers": {(DOMAIN, f"plant_{coordinator.plant_id}")},
             "name": f"{coordinator.plant_name} ({coordinator.plant_strain})",
             "manufacturer": MANUFACTURER,
             "model": "Plant",
@@ -35,8 +35,7 @@ class PlantPlantedDateEntity(PlantDateBase):
     def __init__(self, coordinator: PlantCoordinator) -> None:
         """Initialize planted date entity."""
         super().__init__(coordinator)
-        plant_id = coordinator.plant_name.lower().replace(" ", "_")
-        self._attr_unique_id = f"plant_{plant_id}_planted_date"
+        self._attr_unique_id = f"plant_{coordinator.plant_name}_planted_date"
         self._attr_name = f"{coordinator.plant_name} Einpflanzdatum"
         self._attr_icon = "mdi:calendar-plus"
 

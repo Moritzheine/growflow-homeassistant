@@ -1,4 +1,4 @@
-"""Sensor entities for Plant."""
+"""Sensor entities for Plant using history-based calculations."""
 from __future__ import annotations
 
 import logging
@@ -16,8 +16,6 @@ from ..const import (
     UNIT_DAYS,
     GROWTH_STAGES,
     GROWTH_STAGE_LABELS,
-    VEG_PHASES,
-    FLOWER_PHASES,
 )
 from .coordinator import PlantCoordinator
 
@@ -30,10 +28,8 @@ class PlantSensorBase(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator: PlantCoordinator) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        plant_id = coordinator.plant_name.lower().replace(" ", "_")
-        self._plant_id = plant_id
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"plant_{plant_id}")},
+            "identifiers": {(DOMAIN, f"plant_{coordinator.plant_id}")},
             "name": f"{coordinator.plant_name} ({coordinator.plant_strain})",
             "manufacturer": MANUFACTURER,
             "model": "Plant",
@@ -41,14 +37,48 @@ class PlantSensorBase(CoordinatorEntity, SensorEntity):
         }
 
 
-# Current Phase Sensor
+class PlantHistoryDebugSensor(PlantSensorBase):
+    """Debug sensor showing state history array."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize state history debug sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_state_history_debug"
+        self._attr_name = f"{coordinator.plant_name} State History Debug"
+        self._attr_icon = "mdi:format-list-bulleted"
+        self._attr_entity_registry_enabled_default = False  # Disabled by default
+
+    @property
+    def native_value(self) -> str:
+        """Return number of state history entries."""
+        history = self.coordinator.get_state_history()
+        return f"{len(history)} entries"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return state history and debug info."""
+        history = self.coordinator.get_state_history()
+        
+        return {
+            "plant_id": self.coordinator.plant_id,
+            "current_stage": self.coordinator.growth_stage,
+            "planted_date": str(self.coordinator.planted_date),
+            "state_history": history,
+            "total_entries": len(history),
+            "tracking_method": "state_history_array",
+            "storage_location": "config_entry_options",
+            "first_entry": history[0] if history else None,
+            "last_entry": history[-1] if history else None,
+        }
+
+
 class PlantDaysInCurrentPhaseSensor(PlantSensorBase):
-    """Days in current phase sensor for plant."""
+    """Days in current phase sensor (calculated from history)."""
 
     def __init__(self, coordinator: PlantCoordinator) -> None:
         """Initialize days in current phase sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"plant_{self._plant_id}_days_in_current_phase"
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_days_in_current_phase"
         self._attr_name = f"{coordinator.plant_name} Tage in aktueller Phase"
         self._attr_native_unit_of_measurement = UNIT_DAYS
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -56,30 +86,61 @@ class PlantDaysInCurrentPhaseSensor(PlantSensorBase):
 
     @property
     def native_value(self) -> int | None:
-        """Return days in current phase."""
+        """Return days in current phase from history calculations."""
         return self.coordinator.data.get("days_in_current_phase")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
-        current_stage = self.coordinator.data.get("growth_stage")
+        current_stage = self.coordinator.growth_stage
         return {
             "current_phase": GROWTH_STAGE_LABELS.get(current_stage, current_stage),
             "current_phase_key": current_stage,
-            "strain": self.coordinator.data.get("plant_strain"),
+            "strain": self.coordinator.plant_strain,
+            "calculation_method": "state_history_array",
+            "select_entity": self.coordinator.select_entity_id,
         }
 
 
-# Individual Phase Sensors
+class PlantDaysSincePlantedSensor(PlantSensorBase):
+    """Days since planted sensor."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize days since planted sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_days_since_planted"
+        self._attr_name = f"{coordinator.plant_name} Gesamte Tage"
+        self._attr_native_unit_of_measurement = UNIT_DAYS
+        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
+        self._attr_icon = "mdi:calendar-range"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return days since planted."""
+        return self.coordinator.data.get("days_since_planted")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        return {
+            "planted_date": str(self.coordinator.planted_date),
+            "growth_stage": self.coordinator.growth_stage,
+            "strain": self.coordinator.plant_strain,
+            "total_veg_days": self.coordinator.data.get("total_veg_days"),
+            "total_flower_days": self.coordinator.data.get("total_flower_days"),
+        }
+
+
+# Individual Phase Sensors (History-based)
 class PlantPhaseBaseSensor(PlantSensorBase):
-    """Base class for individual phase sensors."""
+    """Base class for individual phase sensors using history."""
 
     def __init__(self, coordinator: PlantCoordinator, phase: str) -> None:
         """Initialize phase sensor."""
         super().__init__(coordinator)
         self.phase = phase
         self.phase_label = GROWTH_STAGE_LABELS.get(phase, phase)
-        self._attr_unique_id = f"plant_{self._plant_id}_days_in_{phase}"
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_days_in_{phase}"
         self._attr_name = f"{coordinator.plant_name} Tage in {self.phase_label}"
         self._attr_native_unit_of_measurement = UNIT_DAYS
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -101,18 +162,19 @@ class PlantPhaseBaseSensor(PlantSensorBase):
 
     @property
     def native_value(self) -> int | None:
-        """Return days in this phase."""
+        """Return days in this phase from history calculations."""
         return self.coordinator.data.get(f"days_in_{self.phase}", 0)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
-        is_current = self.coordinator.data.get("growth_stage") == self.phase
+        is_current = self.coordinator.growth_stage == self.phase
         return {
             "phase": self.phase_label,
             "phase_key": self.phase,
             "is_current_phase": is_current,
-            "strain": self.coordinator.data.get("plant_strain"),
+            "strain": self.coordinator.plant_strain,
+            "calculation_method": "state_history_array",
         }
 
 
@@ -159,14 +221,14 @@ class PlantFlushingSensor(PlantPhaseBaseSensor):
         super().__init__(coordinator, "flushing")
 
 
-# Summary Sensors
+# Summary Sensors (History-based)
 class PlantTotalVegDaysSensor(PlantSensorBase):
-    """Total vegetative days sensor."""
+    """Total vegetative days sensor from history."""
 
     def __init__(self, coordinator: PlantCoordinator) -> None:
         """Initialize total veg days sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"plant_{self._plant_id}_total_veg_days"
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_total_veg_days"
         self._attr_name = f"{coordinator.plant_name} Vegetative Tage (Gesamt)"
         self._attr_native_unit_of_measurement = UNIT_DAYS
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -174,7 +236,7 @@ class PlantTotalVegDaysSensor(PlantSensorBase):
 
     @property
     def native_value(self) -> int | None:
-        """Return total veg days."""
+        """Return total veg days from history calculations."""
         return self.coordinator.data.get("total_veg_days", 0)
 
     @property
@@ -185,17 +247,18 @@ class PlantTotalVegDaysSensor(PlantSensorBase):
             "early_veg_days": data.get("days_in_early_veg", 0),
             "mid_veg_days": data.get("days_in_mid_veg", 0),
             "late_veg_days": data.get("days_in_late_veg", 0),
-            "strain": data.get("plant_strain"),
+            "strain": self.coordinator.plant_strain,
+            "calculation_method": "history_based",
         }
 
 
 class PlantTotalFlowerDaysSensor(PlantSensorBase):
-    """Total flowering days sensor."""
+    """Total flowering days sensor from history."""
 
     def __init__(self, coordinator: PlantCoordinator) -> None:
         """Initialize total flower days sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"plant_{self._plant_id}_total_flower_days"
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_total_flower_days"
         self._attr_name = f"{coordinator.plant_name} Blüte Tage (Gesamt)"
         self._attr_native_unit_of_measurement = UNIT_DAYS
         self._attr_state_class = SensorStateClass.TOTAL_INCREASING
@@ -203,7 +266,7 @@ class PlantTotalFlowerDaysSensor(PlantSensorBase):
 
     @property
     def native_value(self) -> int | None:
-        """Return total flower days."""
+        """Return total flower days from history calculations."""
         return self.coordinator.data.get("total_flower_days", 0)
 
     @property
@@ -215,34 +278,6 @@ class PlantTotalFlowerDaysSensor(PlantSensorBase):
             "mid_flower_days": data.get("days_in_mid_flower", 0),
             "late_flower_days": data.get("days_in_late_flower", 0),
             "flushing_days": data.get("days_in_flushing", 0),
-            "strain": data.get("plant_strain"),
-        }
-
-
-class PlantDaysSincePlantedSensor(PlantSensorBase):
-    """Days since planted sensor for plant."""
-
-    def __init__(self, coordinator: PlantCoordinator) -> None:
-        """Initialize days since planted sensor."""
-        super().__init__(coordinator)
-        self._attr_unique_id = f"plant_{self._plant_id}_days_since_planted"
-        self._attr_name = f"{coordinator.plant_name} Gesamte Tage"
-        self._attr_native_unit_of_measurement = UNIT_DAYS
-        self._attr_state_class = SensorStateClass.TOTAL_INCREASING
-        self._attr_icon = "mdi:calendar-range"
-
-    @property
-    def native_value(self) -> int | None:
-        """Return days since planted."""
-        return self.coordinator.data.get("days_since_planted")
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return additional state attributes."""
-        return {
-            "planted_date": self.coordinator.data.get("planted_date"),
-            "growth_stage": self.coordinator.data.get("growth_stage"),
-            "strain": self.coordinator.data.get("plant_strain"),
-            "total_veg_days": self.coordinator.data.get("total_veg_days"),
-            "total_flower_days": self.coordinator.data.get("total_flower_days"),
+            "strain": self.coordinator.plant_strain,
+            "calculation_method": "history_based",
         }

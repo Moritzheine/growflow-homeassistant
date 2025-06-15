@@ -1,4 +1,4 @@
-"""Select entities for Plant."""
+"""Select entities for Plant with safe attribute access."""
 from __future__ import annotations
 
 import logging
@@ -24,7 +24,7 @@ class PlantSelectBase(CoordinatorEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator)
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"plant_{coordinator.plant_name}")},
+            "identifiers": {(DOMAIN, f"plant_{coordinator.plant_id}")},
             "name": f"{coordinator.plant_name} ({coordinator.plant_strain})",
             "manufacturer": MANUFACTURER,
             "model": "Plant",
@@ -33,13 +33,12 @@ class PlantSelectBase(CoordinatorEntity, SelectEntity):
 
 
 class PlantGrowthPhaseSelect(PlantSelectBase):
-    """Growth phase select entity for plant."""
+    """Growth phase select entity."""
 
     def __init__(self, coordinator: PlantCoordinator) -> None:
         """Initialize growth phase select entity."""
         super().__init__(coordinator)
-        plant_id = coordinator.plant_name.lower().replace(" ", "_")
-        self._attr_unique_id = f"plant_{plant_id}_growth_phase"
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_growth_phase"
         self._attr_name = f"{coordinator.plant_name} Wachstumsphase"
         self._attr_icon = "mdi:sprout-outline"
         self._attr_options = [GROWTH_STAGE_LABELS[stage] for stage in GROWTH_STAGES]
@@ -60,7 +59,18 @@ class PlantGrowthPhaseSelect(PlantSelectBase):
                 break
         
         if stage_key:
+            # Update coordinator
             await self.coordinator.async_change_growth_stage(stage_key)
             _LOGGER.info("Changed growth phase for %s: %s", self.coordinator.plant_name, option)
         else:
             _LOGGER.error("Unknown growth phase option: %s", option)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Return basic state attributes."""
+        return {
+            "plant_name": self.coordinator.plant_name,
+            "strain": self.coordinator.plant_strain,
+            "planted_date": str(self.coordinator.planted_date),
+            "tracking_method": "config_entry_storage",
+        }

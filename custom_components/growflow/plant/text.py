@@ -20,7 +20,7 @@ class PlantTextBase(CoordinatorEntity, TextEntity):
         """Initialize the text entity."""
         super().__init__(coordinator)
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"plant_{coordinator.plant_name}")},
+            "identifiers": {(DOMAIN, f"plant_{coordinator.plant_id}")},
             "name": f"{coordinator.plant_name} ({coordinator.plant_strain})",
             "manufacturer": MANUFACTURER,
             "model": "Plant",

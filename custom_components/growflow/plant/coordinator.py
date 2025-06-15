@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class PlantCoordinator(DataUpdateCoordinator):
-    """Coordinator to manage Plant data."""
+    """Coordinator to manage Plant data using simple state history array."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize the coordinator."""
@@ -52,88 +52,70 @@ class PlantCoordinator(DataUpdateCoordinator):
             entry.data.get(CONF_GROWTH_STAGE, GROWTH_STAGE_EARLY_VEG)
         )
         
-        # Plant history (in memory for now)
-        self.plant_history: list[dict] = []
+        # State history as simple array in config entry options
+        self.state_history = entry.options.get("state_history", [])
         
-        # Phase tracking - initialize if not exists
-        self.phase_history: dict[str, dict] = entry.options.get("phase_history", {})
-        self._current_phase_start: date | None = None
+        # Initialize if empty
+        if not self.state_history:
+            self.state_history = [{
+                "date": self.planted_date.isoformat(),
+                "stage": self.growth_stage
+            }]
+            self._save_state_history()
         
-        if not self.phase_history:
-            # Initialize with current phase starting from planted date
-            self._initialize_phase_tracking()
-        else:
-            # Load current phase start date
-            current_phase_data = self.phase_history.get(self.growth_stage, {})
-            if current_phase_data.get("start_date"):
-                self._current_phase_start = dt_util.parse_date(current_phase_data["start_date"])
+        # Generate consistent entity IDs
+        self.plant_id = self.plant_name.lower().replace(" ", "_")
+        self.select_entity_id = f"select.{self.plant_id}_growth_phase"
         
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_plant_{self.plant_name.replace(' ', '_')}",
+            name=f"{DOMAIN}_plant_{self.plant_id}",
             update_interval=timedelta(seconds=SCAN_INTERVAL),
         )
 
-    def _initialize_phase_tracking(self) -> None:
-        """Initialize phase tracking with current phase."""
-        self.phase_history = {}
-        
-        # Start current phase from planted date
-        self._current_phase_start = self.planted_date
-        self.phase_history[self.growth_stage] = {
-            "start_date": self.planted_date.isoformat(),
-            "end_date": None,
-            "total_days": 0
-        }
-        
-        # Initialize all other phases as not started
-        for phase in GROWTH_STAGES:
-            if phase != self.growth_stage:
-                self.phase_history[phase] = {
-                    "start_date": None,
-                    "end_date": None,
-                    "total_days": 0
-                }
-        
-        self._save_phase_history()
-
-    def _save_phase_history(self) -> None:
-        """Save phase history to config entry options."""
+    def _save_state_history(self) -> None:
+        """Save state history to config entry options."""
         new_options = dict(self.entry.options)
-        new_options["phase_history"] = self.phase_history
+        new_options["state_history"] = self.state_history
         new_options[CONF_GROWTH_STAGE] = self.growth_stage
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
 
-    def _calculate_days_in_phase(self, phase: str) -> int:
-        """Calculate total days spent in a specific phase."""
-        if phase not in self.phase_history:
-            return 0
+    def _calculate_days_in_phase(self, target_phase: str) -> int:
+        """Calculate days in a specific phase from state history array."""
+        total_days = 0
+        current_phase_start = None
         
-        phase_data = self.phase_history[phase]
+        for entry in self.state_history:
+            entry_date = dt_util.parse_date(entry["date"])
+            entry_stage = entry["stage"]
+            
+            if entry_stage == target_phase:
+                # Phase starts
+                if current_phase_start is None:
+                    current_phase_start = entry_date
+            else:
+                # Phase ends
+                if current_phase_start is not None:
+                    total_days += (entry_date - current_phase_start).days
+                    current_phase_start = None
         
-        # If phase never started
-        if not phase_data.get("start_date"):
-            return 0
+        # If still in this phase, calculate until today
+        if current_phase_start is not None:
+            total_days += (dt_util.now().date() - current_phase_start).days
         
-        start_date = dt_util.parse_date(phase_data["start_date"])
-        
-        # If phase is finished, return stored total
-        if phase_data.get("end_date"):
-            return phase_data.get("total_days", 0)
-        
-        # If this is the current phase, calculate from start to now
-        if phase == self.growth_stage:
-            return (dt_util.now().date() - start_date).days
-        
-        # Phase was started but not current and not finished - shouldn't happen
-        return phase_data.get("total_days", 0)
+        return total_days
 
     def _calculate_days_in_current_phase(self) -> int:
         """Calculate days in current phase."""
-        if not self._current_phase_start:
-            return 0
-        return (dt_util.now().date() - self._current_phase_start).days
+        # Find the last entry with current stage
+        for entry in reversed(self.state_history):
+            if entry["stage"] == self.growth_stage:
+                start_date = dt_util.parse_date(entry["date"])
+                return (dt_util.now().date() - start_date).days
+        
+        # Fallback
+        return 0
 
     def _calculate_total_veg_days(self) -> int:
         """Calculate total days in vegetative phases."""
@@ -150,19 +132,23 @@ class PlantCoordinator(DataUpdateCoordinator):
         return total
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Update data from sensors."""
+        """Update data using simple state history."""
         try:
             # Calculate days since planted
             today = dt_util.now().date()
             days_since_planted = (today - self.planted_date).days
             
-            # Phase calculations
+            # Phase calculations from state history
             days_in_current_phase = self._calculate_days_in_current_phase()
             
-            # Calculate days for each phase
+            # Calculate days for each phase from state history
             phase_days = {}
             for phase in GROWTH_STAGES:
                 phase_days[f"days_in_{phase}"] = self._calculate_days_in_phase(phase)
+            
+            # Calculate totals
+            total_veg_days = self._calculate_total_veg_days()
+            total_flower_days = self._calculate_total_flower_days()
             
             data = {
                 "plant_name": self.plant_name,
@@ -172,19 +158,19 @@ class PlantCoordinator(DataUpdateCoordinator):
                 "growth_stage": self.growth_stage,
                 "days_since_planted": days_since_planted,
                 "days_in_current_phase": days_in_current_phase,
-                "total_veg_days": self._calculate_total_veg_days(),
-                "total_flower_days": self._calculate_total_flower_days(),
-                **phase_days,  # Add individual phase days
+                "total_veg_days": total_veg_days,
+                "total_flower_days": total_flower_days,
+                **phase_days,
             }
             
-            _LOGGER.debug("Updated plant data for %s: %s", self.plant_name, data)
+            _LOGGER.debug("Updated plant data using state history: %s", self.plant_name)
             return data
             
         except Exception as err:
             raise UpdateFailed(f"Error updating plant data: {err}") from err
 
     async def async_change_growth_stage(self, new_stage: str, notes: str | None = None) -> None:
-        """Change growth stage."""
+        """Change growth stage and update state history."""
         if new_stage not in GROWTH_STAGES:
             _LOGGER.error("Invalid growth stage: %s", new_stage)
             return
@@ -193,69 +179,37 @@ class PlantCoordinator(DataUpdateCoordinator):
         if old_stage == new_stage:
             return
         
-        today = dt_util.now().date()
-        
-        # End current phase
-        if old_stage in self.phase_history and self._current_phase_start:
-            total_days = (today - self._current_phase_start).days
-            self.phase_history[old_stage].update({
-                "end_date": today.isoformat(),
-                "total_days": total_days
-            })
-        
-        # Start new phase
-        self.phase_history[new_stage] = {
-            "start_date": today.isoformat(),
-            "end_date": None,
-            "total_days": 0
-        }
-        
         self.growth_stage = new_stage
-        self._current_phase_start = today
         
-        # Save to options
-        self._save_phase_history()
+        # Add to state history array
+        self.state_history.append({
+            "date": dt_util.now().date().isoformat(),
+            "stage": new_stage
+        })
         
-        # Add to history
-        entry = {
-            "type": "phase_change",
-            "timestamp": dt_util.now(),
-            "old_stage": old_stage,
-            "new_stage": new_stage,
-            "notes": notes,
-        }
-        self.plant_history.append(entry)
+        # Save to config entry
+        self._save_state_history()
+        
         await self.async_request_refresh()
         _LOGGER.info("Changed growth stage for %s: %s -> %s", self.plant_name, old_stage, new_stage)
 
     async def async_update_planted_date(self, new_date: date) -> None:
-        """Update planted date."""
+        """Update planted date and adjust state history."""
         old_date = self.planted_date
         self.planted_date = new_date
         
-        # Recalculate phase history if planted date changes
-        # This is complex - for now, just update the config and reset phase tracking
-        if self.growth_stage in self.phase_history:
-            # Update the start of the first phase to the new planted date
-            self.phase_history[self.growth_stage]["start_date"] = new_date.isoformat()
-            self._current_phase_start = new_date
+        # Update first entry in state history
+        if self.state_history:
+            self.state_history[0]["date"] = new_date.isoformat()
         
         # Update config entry
         new_data = dict(self.entry.data)
         new_data[CONF_PLANTED_DATE] = new_date.isoformat()
         self.hass.config_entries.async_update_entry(self.entry, data=new_data)
         
-        # Save phase history
-        self._save_phase_history()
+        # Save state history
+        self._save_state_history()
         
-        # Add to history
-        entry = {
-            "type": "planted_date_change",
-            "timestamp": dt_util.now(),
-            "old_date": old_date,
-            "new_date": new_date,
-        }
-        self.plant_history.append(entry)
         await self.async_request_refresh()
         _LOGGER.info("Updated planted date for %s: %s -> %s", self.plant_name, old_date, new_date)
 
@@ -269,19 +223,14 @@ class PlantCoordinator(DataUpdateCoordinator):
         new_data[CONF_PLANT_STRAIN] = new_strain
         self.hass.config_entries.async_update_entry(self.entry, data=new_data)
         
-        # Add to history
-        entry = {
-            "type": "strain_change",
-            "timestamp": dt_util.now(),
-            "old_strain": old_strain,
-            "new_strain": new_strain,
-        }
-        self.plant_history.append(entry)
         await self.async_request_refresh()
         _LOGGER.info("Updated strain for %s: %s -> %s", self.plant_name, old_strain, new_strain)
 
+    def get_state_history(self) -> list[dict]:
+        """Get the complete state history."""
+        return self.state_history.copy()
+
     def update_config(self, config_data: dict[str, Any]) -> None:
         """Update configuration from options flow."""
-        # No sensors to update anymore - just phase if provided
         if CONF_GROWTH_STAGE in config_data:
             self.growth_stage = config_data[CONF_GROWTH_STAGE]

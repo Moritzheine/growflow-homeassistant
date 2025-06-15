@@ -29,6 +29,7 @@ from .plant.sensors import (
     PlantTotalVegDaysSensor,
     PlantTotalFlowerDaysSensor,
     PlantDaysSincePlantedSensor,
+    PlantHistoryDebugSensor,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,6 +72,9 @@ async def async_setup_entry(
             # Summary sensors
             PlantTotalVegDaysSensor(coordinator),
             PlantTotalFlowerDaysSensor(coordinator),
+            
+            # Debug sensor (disabled by default)
+            PlantHistoryDebugSensor(coordinator),
         ]
     else:
         _LOGGER.error("Unknown coordinator type: %s", type(coordinator))
