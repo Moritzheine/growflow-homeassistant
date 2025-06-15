@@ -54,18 +54,44 @@ CONF_SOIL_MOISTURE_ENTITY = "soil_moisture_entity"
 CONF_EC_ENTITY = "ec_entity"
 CONF_PH_ENTITY = "ph_entity"
 
-# Growth stages
-GROWTH_STAGE_SEEDLING = "seedling"
-GROWTH_STAGE_VEGETATIVE = "vegetative"
-GROWTH_STAGE_FLOWERING = "flowering"
-GROWTH_STAGE_HARVEST = "harvest"
+# New Growth stages (detailed)
+GROWTH_STAGE_EARLY_VEG = "early_veg"
+GROWTH_STAGE_MID_VEG = "mid_veg"
+GROWTH_STAGE_LATE_VEG = "late_veg"
+GROWTH_STAGE_EARLY_FLOWER = "early_flower"
+GROWTH_STAGE_MID_FLOWER = "mid_flower"
+GROWTH_STAGE_LATE_FLOWER = "late_flower"
+GROWTH_STAGE_FLUSHING = "flushing"
+GROWTH_STAGE_DONE = "done"
+
+# Growth stage labels for UI
+GROWTH_STAGE_LABELS = {
+    GROWTH_STAGE_EARLY_VEG: "Early Veg",
+    GROWTH_STAGE_MID_VEG: "Mid Veg",
+    GROWTH_STAGE_LATE_VEG: "Late Veg",
+    GROWTH_STAGE_EARLY_FLOWER: "Early Flower",
+    GROWTH_STAGE_MID_FLOWER: "Mid Flower",
+    GROWTH_STAGE_LATE_FLOWER: "Late Flower",
+    GROWTH_STAGE_FLUSHING: "Flushing",
+    GROWTH_STAGE_DONE: "Ernte/Fertig",
+}
 
 GROWTH_STAGES = [
-    GROWTH_STAGE_SEEDLING,
-    GROWTH_STAGE_VEGETATIVE,
-    GROWTH_STAGE_FLOWERING,
-    GROWTH_STAGE_HARVEST,
+    GROWTH_STAGE_EARLY_VEG,
+    GROWTH_STAGE_MID_VEG,
+    GROWTH_STAGE_LATE_VEG,
+    GROWTH_STAGE_EARLY_FLOWER,
+    GROWTH_STAGE_MID_FLOWER,
+    GROWTH_STAGE_LATE_FLOWER,
+    GROWTH_STAGE_FLUSHING,
+    GROWTH_STAGE_DONE,
 ]
+
+# Legacy growth stages (for backward compatibility) 
+GROWTH_STAGE_SEEDLING = "early_veg"  # Map to new system
+GROWTH_STAGE_VEGETATIVE = "mid_veg"
+GROWTH_STAGE_FLOWERING = "early_flower"
+GROWTH_STAGE_HARVEST = "done"
 
 # Plant device classes
 PLANT_DEVICE_CLASS_MOISTURE = "moisture"
@@ -83,3 +109,13 @@ SERVICE_WATER_PLANT = "water_plant"
 SERVICE_FERTILIZE_PLANT = "fertilize_plant"
 SERVICE_CHANGE_PHASE = "change_phase"
 SERVICE_ADD_NOTE = "add_note"
+
+# Phase tracking attributes
+ATTR_PHASE_HISTORY = "phase_history"
+ATTR_CURRENT_PHASE_START = "current_phase_start"
+ATTR_TOTAL_VEG_DAYS = "total_veg_days"
+ATTR_TOTAL_FLOWER_DAYS = "total_flower_days"
+
+# Vegetative and flowering phase lists
+VEG_PHASES = [GROWTH_STAGE_EARLY_VEG, GROWTH_STAGE_MID_VEG, GROWTH_STAGE_LATE_VEG]
+FLOWER_PHASES = [GROWTH_STAGE_EARLY_FLOWER, GROWTH_STAGE_MID_FLOWER, GROWTH_STAGE_LATE_FLOWER, GROWTH_STAGE_FLUSHING]

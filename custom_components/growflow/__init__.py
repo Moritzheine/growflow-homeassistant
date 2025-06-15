@@ -14,7 +14,13 @@ from .plant.services import async_setup_services, async_unload_services
 _LOGGER = logging.getLogger(__name__)
 
 # Platforms die wir unterstützen
-PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.NUMBER]
+PLATFORMS: list[Platform] = [
+    Platform.SENSOR, 
+    Platform.NUMBER, 
+    Platform.DATE, 
+    Platform.TEXT, 
+    Platform.SELECT
+]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -25,10 +31,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Growbox Coordinator erstellen
         coordinator = GrowboxCoordinator(hass, entry)
         device_type = "growbox"
+        # Growbox verwendet nur sensor und number platforms
+        platforms = [Platform.SENSOR, Platform.NUMBER]
     elif CONF_PLANT_NAME in entry.data:
         # Plant Coordinator erstellen
         coordinator = PlantCoordinator(hass, entry)
         device_type = "plant"
+        # Plant verwendet alle platforms
+        platforms = PLATFORMS
     else:
         _LOGGER.error("Unknown device type in config entry: %s", entry.data)
         return False
@@ -49,7 +59,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async_setup_services(hass)
     
     # Platforms laden
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
     
     _LOGGER.info("GrowFlow %s setup completed for %s", device_type, entry.title)
     return True
@@ -58,8 +68,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     
+    # Determine platforms to unload
+    if CONF_GROWBOX_NAME in entry.data:
+        platforms = [Platform.SENSOR, Platform.NUMBER]
+    else:
+        platforms = PLATFORMS
+    
     # Platforms entladen
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+    if unload_ok := await hass.config_entries.async_unload_platforms(entry, platforms):
         coordinator = hass.data[DOMAIN].pop(entry.entry_id)
         
         # Plant Services entladen wenn das der letzte Plant war

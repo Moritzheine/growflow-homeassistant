@@ -17,12 +17,18 @@ from .growbox.sensors import (
 )
 from .plant.coordinator import PlantCoordinator
 from .plant.sensors import (
-    PlantSoilMoistureSensor,
-    PlantECSensor,
-    PlantPHSensor,
+    # Phase tracking sensors
+    PlantDaysInCurrentPhaseSensor,
+    PlantEarlyVegSensor,
+    PlantMidVegSensor,
+    PlantLateVegSensor,
+    PlantEarlyFlowerSensor,
+    PlantMidFlowerSensor,
+    PlantLateFlowerSensor,
+    PlantFlushingSensor,
+    PlantTotalVegDaysSensor,
+    PlantTotalFlowerDaysSensor,
     PlantDaysSincePlantedSensor,
-    PlantDaysSinceWateringSensor,
-    PlantGrowthStageSensor,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -45,14 +51,26 @@ async def async_setup_entry(
             GrowboxTargetHumiditySensor(coordinator),
         ]
     elif isinstance(coordinator, PlantCoordinator):
-        # Plant Sensoren
+        # Plant Sensoren (nur Phase-Tracking)
         sensors = [
-            PlantSoilMoistureSensor(coordinator),
-            PlantECSensor(coordinator),
-            PlantPHSensor(coordinator),
+            # Basic sensors
             PlantDaysSincePlantedSensor(coordinator),
-            PlantDaysSinceWateringSensor(coordinator),
-            PlantGrowthStageSensor(coordinator),
+            
+            # Phase tracking sensors
+            PlantDaysInCurrentPhaseSensor(coordinator),
+            
+            # Individual phase sensors
+            PlantEarlyVegSensor(coordinator),
+            PlantMidVegSensor(coordinator),
+            PlantLateVegSensor(coordinator),
+            PlantEarlyFlowerSensor(coordinator),
+            PlantMidFlowerSensor(coordinator),
+            PlantLateFlowerSensor(coordinator),
+            PlantFlushingSensor(coordinator),
+            
+            # Summary sensors
+            PlantTotalVegDaysSensor(coordinator),
+            PlantTotalFlowerDaysSensor(coordinator),
         ]
     else:
         _LOGGER.error("Unknown coordinator type: %s", type(coordinator))

@@ -15,6 +15,7 @@ from ..const import (
     SERVICE_CHANGE_PHASE,
     SERVICE_ADD_NOTE,
     GROWTH_STAGES,
+    GROWTH_STAGE_LABELS,
 )
 from .coordinator import PlantCoordinator
 
@@ -92,7 +93,8 @@ def async_setup_services(hass: HomeAssistant) -> None:
         coordinator = _get_plant_coordinator_by_entity(hass, entity_id)
         if coordinator:
             await coordinator.async_change_growth_stage(new_stage, notes)
-            _LOGGER.info("Changed phase for plant %s: %s", coordinator.plant_name, new_stage)
+            stage_label = GROWTH_STAGE_LABELS.get(new_stage, new_stage)
+            _LOGGER.info("Changed phase for plant %s: %s", coordinator.plant_name, stage_label)
         else:
             _LOGGER.error("Plant coordinator not found for entity %s", entity_id)
 
@@ -132,16 +134,21 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
 def _get_plant_coordinator_by_entity(hass: HomeAssistant, entity_id: str) -> PlantCoordinator | None:
     """Get plant coordinator by entity ID."""
-    # Extract plant name from entity_id (e.g., "sensor.my_plant_soil_moisture" -> "my_plant")
-    if not entity_id.startswith("sensor.") or "_plant_" not in entity_id:
+    # Extract plant identifier from entity_id 
+    # Neue Entity IDs: sensor.blue_dream_1_soil_moisture, date.blue_dream_1_planted_date, etc.
+    if not ("sensor." in entity_id or "date." in entity_id or "text." in entity_id or "select." in entity_id):
         return None
     
-    # Simple approach: try to find matching coordinator
+    # Remove domain prefix (sensor., date., etc.)
+    entity_name = entity_id.split(".", 1)[1]
+    
+    # Try to find matching coordinator
     for entry_id, coordinator in hass.data.get(DOMAIN, {}).items():
         if isinstance(coordinator, PlantCoordinator):
             # Check if entity belongs to this plant
-            plant_id = f"plant_{coordinator.plant_name}"
-            if plant_id in entity_id:
+            # Plant name format: "Blue Dream 1" -> entity prefix: "blue_dream_1"
+            plant_prefix = coordinator.plant_name.lower().replace(" ", "_")
+            if entity_name.startswith(plant_prefix):
                 return coordinator
     
     return None

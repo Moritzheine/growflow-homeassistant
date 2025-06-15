@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -25,11 +26,8 @@ from .const import (
     CONF_PLANT_GROWBOX,
     CONF_PLANTED_DATE,
     CONF_GROWTH_STAGE,
-    CONF_SOIL_MOISTURE_ENTITY,
-    CONF_EC_ENTITY,
-    CONF_PH_ENTITY,
     GROWTH_STAGES,
-    GROWTH_STAGE_SEEDLING,
+    GROWTH_STAGE_EARLY_VEG,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,10 +46,9 @@ STEP_GROWBOX_DATA_SCHEMA = vol.Schema(
 
 STEP_PLANT_DATA_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_PLANT_NAME): str,
-        vol.Optional(CONF_PLANT_STRAIN, default="Unknown"): str,
+        vol.Required(CONF_PLANT_STRAIN, default="Unknown"): str,
         vol.Required(CONF_PLANTED_DATE): selector.DateSelector(),
-        vol.Optional(CONF_GROWTH_STAGE, default=GROWTH_STAGE_SEEDLING): vol.In(GROWTH_STAGES),
+        vol.Optional(CONF_GROWTH_STAGE, default=GROWTH_STAGE_EARLY_VEG): vol.In(GROWTH_STAGES),
     }
 )
 
@@ -68,20 +65,6 @@ STEP_SENSORS_DATA_SCHEMA = vol.Schema(
         ),
         vol.Optional(CONF_TARGET_VPD, default=DEFAULT_TARGET_VPD): vol.All(
             vol.Coerce(float), vol.Range(min=0.4, max=2.0)
-        ),
-    }
-)
-
-STEP_PLANT_SENSORS_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Optional(CONF_SOIL_MOISTURE_ENTITY): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
-        ),
-        vol.Optional(CONF_EC_ENTITY): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor")
-        ),
-        vol.Optional(CONF_PH_ENTITY): selector.EntitySelector(
-            selector.EntitySelectorConfig(domain="sensor")
         ),
     }
 )
@@ -103,6 +86,34 @@ class GrowFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> GrowFlowOptionsFlow:
         """Create the options flow."""
         return GrowFlowOptionsFlow(config_entry)
+
+    def _generate_plant_name(self, strain: str) -> str:
+        """Generate unique plant name with auto-numbering."""
+        # Sanitize strain name
+        clean_strain = re.sub(r'[^a-zA-Z0-9\s]', '', strain).strip()
+        if not clean_strain:
+            clean_strain = "Unknown"
+        
+        # Get existing plant entries
+        existing_entries = self._async_current_entries()
+        existing_numbers = set()
+        
+        # Find existing numbers for this strain
+        for entry in existing_entries:
+            if entry.data.get(CONF_PLANT_NAME):
+                plant_name = entry.data[CONF_PLANT_NAME]
+                # Extract number from name like "Blue Dream 1" -> 1
+                if plant_name.startswith(clean_strain):
+                    remaining = plant_name[len(clean_strain):].strip()
+                    if remaining.isdigit():
+                        existing_numbers.add(int(remaining))
+        
+        # Find next available number
+        next_number = 1
+        while next_number in existing_numbers:
+            next_number += 1
+        
+        return f"{clean_strain} {next_number}"
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -151,30 +162,31 @@ class GrowFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Prüfen ob Plant-Name bereits verwendet wird
+            # Generate automatic plant name
+            strain = user_input[CONF_PLANT_STRAIN]
+            plant_name = self._generate_plant_name(strain)
+            user_input[CONF_PLANT_NAME] = plant_name
+            
+            # Verfügbare Growboxen finden
             existing_entries = self._async_current_entries()
+            available_growboxes = []
             for entry in existing_entries:
-                if entry.data.get(CONF_PLANT_NAME) == user_input[CONF_PLANT_NAME]:
-                    errors["base"] = "name_exists"
-                    break
-
-            if not errors:
-                # Verfügbare Growboxen finden
-                available_growboxes = []
-                for entry in existing_entries:
-                    if entry.data.get(CONF_GROWBOX_NAME):
-                        available_growboxes.append(entry.data[CONF_GROWBOX_NAME])
-                
-                if not available_growboxes:
-                    errors["base"] = "no_growboxes"
-                else:
-                    self._data.update(user_input)
-                    return await self.async_step_plant_growbox()
+                if entry.data.get(CONF_GROWBOX_NAME):
+                    available_growboxes.append(entry.data[CONF_GROWBOX_NAME])
+            
+            if not available_growboxes:
+                errors["base"] = "no_growboxes"
+            else:
+                self._data.update(user_input)
+                return await self.async_step_plant_growbox()
 
         return self.async_show_form(
             step_id="plant",
             data_schema=STEP_PLANT_DATA_SCHEMA,
             errors=errors,
+            description_placeholders={
+                "info": "Der Gerätename wird automatisch generiert: {Strain} {Nummer}"
+            },
         )
 
     async def async_step_plant_growbox(
@@ -183,7 +195,12 @@ class GrowFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle plant growbox assignment."""
         if user_input is not None:
             self._data.update(user_input)
-            return await self.async_step_plant_sensors()
+            
+            # Plant Entry direkt erstellen (keine Sensoren mehr)
+            return self.async_create_entry(
+                title=self._data[CONF_PLANT_NAME],
+                data=self._data,
+            )
 
         # Verfügbare Growboxen finden
         existing_entries = self._async_current_entries()
@@ -199,24 +216,9 @@ class GrowFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="plant_growbox",
             data_schema=growbox_schema,
-        )
-
-    async def async_step_plant_sensors(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle plant sensor configuration."""
-        if user_input is not None:
-            self._data.update(user_input)
-            
-            # Plant Entry erstellen
-            return self.async_create_entry(
-                title=f"{self._data[CONF_PLANT_NAME]} ({self._data[CONF_PLANT_STRAIN]})",
-                data=self._data,
-            )
-
-        return self.async_show_form(
-            step_id="plant_sensors",
-            data_schema=STEP_PLANT_SENSORS_DATA_SCHEMA,
+            description_placeholders={
+                "plant_name": self._data.get(CONF_PLANT_NAME, "Plant"),
+            },
         )
 
     async def async_step_sensors(
@@ -264,37 +266,43 @@ class GrowFlowOptionsFlow(config_entries.OptionsFlow):
         # Aktuelle Werte als Default verwenden
         current_data = {**self.config_entry.data, **self.config_entry.options}
         
-        options_schema = vol.Schema(
-            {
-                vol.Optional(
-                    CONF_TEMPERATURE_ENTITY,
-                    default=current_data.get(CONF_TEMPERATURE_ENTITY),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
-                ),
-                vol.Optional(
-                    CONF_HUMIDITY_ENTITY,
-                    default=current_data.get(CONF_HUMIDITY_ENTITY),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
-                ),
-                vol.Optional(
-                    CONF_HYGROSTAT_ENTITY,
-                    default=current_data.get(CONF_HYGROSTAT_ENTITY),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain=["switch", "fan", "humidifier"])
-                ),
-                vol.Optional(
-                    CONF_TARGET_VPD,
-                    default=current_data.get(CONF_TARGET_VPD, DEFAULT_TARGET_VPD),
-                ): vol.All(vol.Coerce(float), vol.Range(min=0.4, max=2.0)),
-            }
-        )
+        # Unterschiedliche Schemas je nach Device-Typ
+        if CONF_GROWBOX_NAME in current_data:
+            # Growbox Options
+            options_schema = vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_TEMPERATURE_ENTITY,
+                        default=current_data.get(CONF_TEMPERATURE_ENTITY),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                    ),
+                    vol.Optional(
+                        CONF_HUMIDITY_ENTITY,
+                        default=current_data.get(CONF_HUMIDITY_ENTITY),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+                    ),
+                    vol.Optional(
+                        CONF_HYGROSTAT_ENTITY,
+                        default=current_data.get(CONF_HYGROSTAT_ENTITY),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain=["switch", "fan", "humidifier"])
+                    ),
+                    vol.Optional(
+                        CONF_TARGET_VPD,
+                        default=current_data.get(CONF_TARGET_VPD, DEFAULT_TARGET_VPD),
+                    ): vol.All(vol.Coerce(float), vol.Range(min=0.4, max=2.0)),
+                }
+            )
+        else:
+            # Plant Options - keine Sensor-Konfiguration mehr
+            options_schema = vol.Schema({})
 
         return self.async_show_form(
             step_id="init",
             data_schema=options_schema,
             description_placeholders={
-                "growbox_name": self.config_entry.data[CONF_GROWBOX_NAME],
+                "device_name": self.config_entry.title,
             },
         )
