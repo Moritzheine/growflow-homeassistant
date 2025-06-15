@@ -44,15 +44,16 @@ ATTR_TARGET_VPD = "target_vpd"
 ATTR_TARGET_HUMIDITY = "target_humidity"
 ATTR_VPD_STATUS = "vpd_status"
 
-# Plant config
+# Plant config (simplified)
 CONF_PLANT_NAME = "plant_name"
 CONF_PLANT_STRAIN = "plant_strain"
 CONF_PLANT_GROWBOX = "plant_growbox"
 CONF_PLANTED_DATE = "planted_date"
 CONF_GROWTH_STAGE = "growth_stage"
-CONF_SOIL_MOISTURE_ENTITY = "soil_moisture_entity"
-CONF_EC_ENTITY = "ec_entity"
-CONF_PH_ENTITY = "ph_entity"
+
+# Watering System
+CONF_DEFAULT_WATER_VOLUME = "default_water_volume"
+DEFAULT_WATER_VOLUME = 2000  # 2 Liter in ml
 
 # New Growth stages (detailed)
 GROWTH_STAGE_EARLY_VEG = "early_veg"
@@ -93,22 +94,19 @@ GROWTH_STAGE_VEGETATIVE = "mid_veg"
 GROWTH_STAGE_FLOWERING = "early_flower"
 GROWTH_STAGE_HARVEST = "done"
 
-# Plant device classes
-PLANT_DEVICE_CLASS_MOISTURE = "moisture"
-PLANT_DEVICE_CLASS_EC = "voltage"  # mS/cm ähnlich voltage
-PLANT_DEVICE_CLASS_PH = "ph"
+# Plant device classes (not used anymore)
+# PLANT_DEVICE_CLASS_MOISTURE = "moisture"
 
-# Plant units
+# Plant units (simplified)
 UNIT_DAYS = "days"
-UNIT_EC = "mS/cm"
-UNIT_PH = "pH"
 UNIT_ML = "ml"
 
-# Services
-SERVICE_WATER_PLANT = "water_plant"
-SERVICE_FERTILIZE_PLANT = "fertilize_plant"
+# Services (simplified)
 SERVICE_CHANGE_PHASE = "change_phase"
 SERVICE_ADD_NOTE = "add_note"
+# Watering Services
+SERVICE_WATER_PLANT = "water_plant"
+SERVICE_WATER_PLANT_QUICK = "water_plant_quick"
 
 # Phase tracking attributes
 ATTR_PHASE_HISTORY = "phase_history"

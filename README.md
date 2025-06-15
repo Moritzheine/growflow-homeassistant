@@ -90,11 +90,5 @@ docker-compose restart homeassistant
 # Stop everything
 docker-compose down
 
-# Clean restart (fresh HA install)
-docker-compose down
-rm -rf ha-config/.storage
-docker-compose up -d
-
-
 ```
 ````

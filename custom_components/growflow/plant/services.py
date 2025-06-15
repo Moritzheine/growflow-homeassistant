@@ -12,6 +12,8 @@ from ..const import (
     DOMAIN,
     SERVICE_CHANGE_PHASE,
     SERVICE_ADD_NOTE,
+    SERVICE_WATER_PLANT,
+    SERVICE_WATER_PLANT_QUICK,
     GROWTH_STAGES,
     GROWTH_STAGE_LABELS,
 )
@@ -29,6 +31,17 @@ CHANGE_PHASE_SCHEMA = vol.Schema({
 ADD_NOTE_SCHEMA = vol.Schema({
     vol.Required("entity_id"): cv.entity_id,
     vol.Required("note"): cv.string,
+})
+
+# ✅ NEW: Watering service schemas
+WATER_PLANT_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
+    vol.Required("volume_ml"): vol.All(vol.Coerce(int), vol.Range(min=1, max=10000)),
+    vol.Optional("notes"): cv.string,
+})
+
+WATER_PLANT_QUICK_SCHEMA = vol.Schema({
+    vol.Required("entity_id"): cv.entity_id,
 })
 
 
@@ -70,6 +83,32 @@ def async_setup_services(hass: HomeAssistant) -> None:
         else:
             _LOGGER.error("Plant coordinator not found for entity %s", entity_id)
 
+    # ✅ NEW: Watering service handlers
+    async def water_plant(call: ServiceCall) -> None:
+        """Handle water plant service call."""
+        entity_id = call.data["entity_id"]
+        volume_ml = call.data["volume_ml"]
+        notes = call.data.get("notes")
+        
+        coordinator = _get_plant_coordinator_by_entity(hass, entity_id)
+        if coordinator:
+            await coordinator.async_add_watering_entry(volume_ml, notes)
+            _LOGGER.info("Watered plant %s: %s ml", coordinator.plant_name, volume_ml)
+        else:
+            _LOGGER.error("Plant coordinator not found for entity %s", entity_id)
+
+    async def water_plant_quick(call: ServiceCall) -> None:
+        """Handle quick water plant service call."""
+        entity_id = call.data["entity_id"]
+        
+        coordinator = _get_plant_coordinator_by_entity(hass, entity_id)
+        if coordinator:
+            await coordinator.async_water_plant_quick()
+            _LOGGER.info("Quick watered plant %s: %s ml", 
+                        coordinator.plant_name, coordinator.default_water_volume)
+        else:
+            _LOGGER.error("Plant coordinator not found for entity %s", entity_id)
+
     async def add_note(call: ServiceCall) -> None:
         """Handle add note service call."""
         entity_id = call.data["entity_id"]
@@ -96,8 +135,15 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_ADD_NOTE, add_note, schema=ADD_NOTE_SCHEMA
     )
+    # ✅ NEW: Watering services
+    hass.services.async_register(
+        DOMAIN, SERVICE_WATER_PLANT, water_plant, schema=WATER_PLANT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_WATER_PLANT_QUICK, water_plant_quick, schema=WATER_PLANT_QUICK_SCHEMA
+    )
 
-    _LOGGER.info("Plant services registered with history-based tracking")
+    _LOGGER.info("Plant services registered (including watering system)")
 
 
 def _get_plant_coordinator_by_entity(hass: HomeAssistant, entity_id: str) -> PlantCoordinator | None:
@@ -123,4 +169,7 @@ def async_unload_services(hass: HomeAssistant) -> None:
     """Unload the plant services."""
     hass.services.async_remove(DOMAIN, SERVICE_CHANGE_PHASE)
     hass.services.async_remove(DOMAIN, SERVICE_ADD_NOTE)
+    # ✅ NEW: Remove watering services
+    hass.services.async_remove(DOMAIN, SERVICE_WATER_PLANT)
+    hass.services.async_remove(DOMAIN, SERVICE_WATER_PLANT_QUICK)
     _LOGGER.info("Plant services unloaded")

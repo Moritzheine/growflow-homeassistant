@@ -30,6 +30,13 @@ from .plant.sensors import (
     PlantTotalFlowerDaysSensor,
     PlantDaysSincePlantedSensor,
     PlantHistoryDebugSensor,
+    # ✅ NEW: Watering sensors
+    PlantLastWateringSensor,
+    PlantDaysSinceWateringSensor,
+    PlantWaterThisWeekSensor,
+    PlantAvgWaterPerSessionSensor,
+    PlantWateringFrequencySensor,
+    PlantWateringDebugSensor,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,7 +59,7 @@ async def async_setup_entry(
             GrowboxTargetHumiditySensor(coordinator),
         ]
     elif isinstance(coordinator, PlantCoordinator):
-        # Plant Sensoren (nur Phase-Tracking)
+        # Plant Sensoren (Phase-Tracking + Watering)
         sensors = [
             # Basic sensors
             PlantDaysSincePlantedSensor(coordinator),
@@ -73,8 +80,16 @@ async def async_setup_entry(
             PlantTotalVegDaysSensor(coordinator),
             PlantTotalFlowerDaysSensor(coordinator),
             
-            # Debug sensor (disabled by default)
+            # ✅ NEW: Watering sensors
+            PlantLastWateringSensor(coordinator),
+            PlantDaysSinceWateringSensor(coordinator),
+            PlantWaterThisWeekSensor(coordinator),
+            PlantAvgWaterPerSessionSensor(coordinator),
+            PlantWateringFrequencySensor(coordinator),
+            
+            # Debug sensors (disabled by default)
             PlantHistoryDebugSensor(coordinator),
+            PlantWateringDebugSensor(coordinator),
         ]
     else:
         _LOGGER.error("Unknown coordinator type: %s", type(coordinator))

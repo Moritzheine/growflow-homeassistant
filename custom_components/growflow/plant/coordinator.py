@@ -18,6 +18,8 @@ from ..const import (
     CONF_PLANT_GROWBOX,
     CONF_PLANTED_DATE,
     CONF_GROWTH_STAGE,
+    CONF_DEFAULT_WATER_VOLUME,
+    DEFAULT_WATER_VOLUME,
     GROWTH_STAGE_EARLY_VEG,
     GROWTH_STAGES,
     VEG_PHASES,
@@ -55,6 +57,10 @@ class PlantCoordinator(DataUpdateCoordinator):
         # State history as simple array in config entry options
         self.state_history = entry.options.get("state_history", [])
         
+        # ✅ NEW: Watering history system
+        self.watering_history = entry.options.get("watering_history", [])
+        self.default_water_volume = entry.options.get("default_water_volume", DEFAULT_WATER_VOLUME)
+        
         # Initialize if empty
         if not self.state_history:
             self.state_history = [{
@@ -78,6 +84,8 @@ class PlantCoordinator(DataUpdateCoordinator):
         """Save state history to config entry options."""
         new_options = dict(self.entry.options)
         new_options["state_history"] = self.state_history
+        new_options["watering_history"] = self.watering_history
+        new_options["default_water_volume"] = self.default_water_volume
         new_options[CONF_GROWTH_STAGE] = self.growth_stage
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
 
@@ -131,6 +139,96 @@ class PlantCoordinator(DataUpdateCoordinator):
             total += self._calculate_days_in_phase(phase)
         return total
 
+    # ✅ NEW: Watering calculation methods
+    def _get_last_watering(self) -> datetime | None:
+        """Get timestamp of last watering."""
+        if not self.watering_history:
+            return None
+        
+        last_entry = self.watering_history[-1]
+        timestamp_str = last_entry["timestamp"]
+        
+        # ✅ Ensure we return a proper datetime object
+        try:
+            return dt_util.parse_datetime(timestamp_str)
+        except (ValueError, TypeError) as e:
+            _LOGGER.error("Failed to parse watering timestamp %s: %s", timestamp_str, e)
+            return None
+
+    def _calculate_days_since_watering(self) -> int | None:
+        """Calculate days since last watering."""
+        last_watering = self._get_last_watering()
+        if not last_watering:
+            return None
+        
+        # ✅ Ensure we have a proper datetime object
+        try:
+            return (dt_util.now() - last_watering).days
+        except (TypeError, AttributeError) as e:
+            _LOGGER.error("Failed to calculate days since watering: %s", e)
+            return None
+
+    def _calculate_water_this_week(self) -> int:
+        """Calculate total water volume in last 7 days."""
+        if not self.watering_history:
+            return 0
+        
+        week_ago = dt_util.now() - timedelta(days=7)
+        total = 0
+        
+        for entry in self.watering_history:
+            try:
+                entry_time = dt_util.parse_datetime(entry["timestamp"])
+                if entry_time and entry_time >= week_ago:
+                    total += entry.get("volume_ml", 0)
+            except (ValueError, TypeError) as e:
+                _LOGGER.debug("Skipping invalid timestamp in watering history: %s", e)
+                continue
+        
+        return total
+
+    def _calculate_avg_water_per_session(self) -> float:
+        """Calculate average water volume per session (last 10 sessions)."""
+        if not self.watering_history:
+            return 0.0
+        
+        # Take last 10 sessions
+        recent_sessions = self.watering_history[-10:]
+        if not recent_sessions:
+            return 0.0
+        
+        total_volume = sum(entry.get("volume_ml", 0) for entry in recent_sessions)
+        return round(total_volume / len(recent_sessions), 1)
+
+    def _calculate_watering_frequency(self) -> float:
+        """Calculate average days between watering sessions."""
+        if len(self.watering_history) < 2:
+            return 0.0
+        
+        # Calculate differences between last 5 sessions
+        recent_sessions = self.watering_history[-5:]
+        if len(recent_sessions) < 2:
+            return 0.0
+        
+        total_days = 0
+        count = 0
+        
+        for i in range(1, len(recent_sessions)):
+            try:
+                prev_time = dt_util.parse_datetime(recent_sessions[i-1]["timestamp"])
+                curr_time = dt_util.parse_datetime(recent_sessions[i]["timestamp"])
+                
+                if prev_time and curr_time:
+                    days_diff = (curr_time - prev_time).days
+                    if days_diff > 0:  # Ignore same-day waterings
+                        total_days += days_diff
+                        count += 1
+            except (ValueError, TypeError) as e:
+                _LOGGER.debug("Skipping invalid timestamps in frequency calculation: %s", e)
+                continue
+        
+        return round(total_days / count, 1) if count > 0 else 0.0
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data using simple state history."""
         try:
@@ -150,6 +248,13 @@ class PlantCoordinator(DataUpdateCoordinator):
             total_veg_days = self._calculate_total_veg_days()
             total_flower_days = self._calculate_total_flower_days()
             
+            # ✅ NEW: Watering calculations
+            last_watering = self._get_last_watering()
+            days_since_watering = self._calculate_days_since_watering()
+            water_this_week = self._calculate_water_this_week()
+            avg_water_per_session = self._calculate_avg_water_per_session()
+            watering_frequency = self._calculate_watering_frequency()
+            
             data = {
                 "plant_name": self.plant_name,
                 "plant_strain": self.plant_strain,
@@ -160,6 +265,14 @@ class PlantCoordinator(DataUpdateCoordinator):
                 "days_in_current_phase": days_in_current_phase,
                 "total_veg_days": total_veg_days,
                 "total_flower_days": total_flower_days,
+                # ✅ NEW: Watering data
+                "default_water_volume": self.default_water_volume,
+                "last_watering": last_watering,
+                "days_since_watering": days_since_watering,
+                "water_this_week": water_this_week,
+                "avg_water_per_session": avg_water_per_session,
+                "watering_frequency": watering_frequency,
+                "total_watering_sessions": len(self.watering_history),
                 **phase_days,
             }
             
@@ -230,7 +343,40 @@ class PlantCoordinator(DataUpdateCoordinator):
         """Get the complete state history."""
         return self.state_history.copy()
 
+    # ✅ NEW: Watering system methods
+    async def async_add_watering_entry(self, volume_ml: int, notes: str | None = None) -> None:
+        """Add watering entry to history."""
+        entry = {
+            "timestamp": dt_util.now().isoformat(),
+            "volume_ml": volume_ml,
+            "growth_stage": self.growth_stage,
+            "notes": notes,
+        }
+        
+        self.watering_history.append(entry)
+        self._save_state_history()
+        
+        await self.async_request_refresh()
+        _LOGGER.info("Added watering entry for %s: %s ml", self.plant_name, volume_ml)
+
+    async def async_water_plant_quick(self) -> None:
+        """Quick water with default volume."""
+        await self.async_add_watering_entry(self.default_water_volume, "Quick watering")
+
+    async def async_update_default_water_volume(self, volume_ml: int) -> None:
+        """Update default water volume."""
+        self.default_water_volume = volume_ml
+        self._save_state_history()
+        await self.async_request_refresh()
+        _LOGGER.info("Updated default water volume for %s: %s ml", self.plant_name, volume_ml)
+
+    def get_watering_history(self) -> list[dict]:
+        """Get the complete watering history."""
+        return self.watering_history.copy()
+
     def update_config(self, config_data: dict[str, Any]) -> None:
         """Update configuration from options flow."""
         if CONF_GROWTH_STAGE in config_data:
             self.growth_stage = config_data[CONF_GROWTH_STAGE]
+        if CONF_DEFAULT_WATER_VOLUME in config_data:
+            self.default_water_volume = config_data[CONF_DEFAULT_WATER_VOLUME]

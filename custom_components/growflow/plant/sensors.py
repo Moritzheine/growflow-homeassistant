@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -14,6 +15,7 @@ from ..const import (
     DOMAIN,
     MANUFACTURER,
     UNIT_DAYS,
+    UNIT_ML,
     GROWTH_STAGES,
     GROWTH_STAGE_LABELS,
 )
@@ -175,6 +177,197 @@ class PlantPhaseBaseSensor(PlantSensorBase):
             "is_current_phase": is_current,
             "strain": self.coordinator.plant_strain,
             "calculation_method": "state_history_array",
+        }
+
+
+# ✅ NEW: Watering Sensors
+class PlantLastWateringSensor(PlantSensorBase):
+    """Last watering timestamp sensor."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize last watering sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_last_watering"
+        self._attr_name = f"{coordinator.plant_name} Letztes Gießen"
+        self._attr_icon = "mdi:water-clock"
+        self._attr_device_class = "timestamp"
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return last watering timestamp as datetime object."""
+        last_watering = self.coordinator.data.get("last_watering")
+        return last_watering  # ✅ Return datetime object directly, not ISO string
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        return {
+            "total_sessions": self.coordinator.data.get("total_watering_sessions", 0),
+            "strain": self.coordinator.plant_strain,
+        }
+
+
+class PlantDaysSinceWateringSensor(PlantSensorBase):
+    """Days since watering sensor."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize days since watering sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_days_since_watering"
+        self._attr_name = f"{coordinator.plant_name} Tage seit Gießen"
+        self._attr_native_unit_of_measurement = UNIT_DAYS
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:water-alert"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return days since watering."""
+        return self.coordinator.data.get("days_since_watering")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        days = self.coordinator.data.get("days_since_watering")
+        if days is None:
+            status = "Never watered"
+        elif days > 5:
+            status = "Overdue"
+        elif days > 3:
+            status = "Due soon"
+        else:
+            status = "Good"
+            
+        return {
+            "status": status,
+            "last_watering": str(self.coordinator.data.get("last_watering", "Never")),
+            "strain": self.coordinator.plant_strain,
+        }
+
+
+class PlantWaterThisWeekSensor(PlantSensorBase):
+    """Water volume this week sensor."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize water this week sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_water_this_week"
+        self._attr_name = f"{coordinator.plant_name} Wasser diese Woche"
+        self._attr_native_unit_of_measurement = UNIT_ML
+        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_icon = "mdi:water"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return water volume this week."""
+        return self.coordinator.data.get("water_this_week", 0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        return {
+            "total_sessions": self.coordinator.data.get("total_watering_sessions", 0),
+            "avg_per_session": self.coordinator.data.get("avg_water_per_session", 0),
+            "strain": self.coordinator.plant_strain,
+        }
+
+
+class PlantAvgWaterPerSessionSensor(PlantSensorBase):
+    """Average water per session sensor."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize avg water per session sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_avg_water_per_session"
+        self._attr_name = f"{coordinator.plant_name} Ø Wasser pro Gießvorgang"
+        self._attr_native_unit_of_measurement = UNIT_ML
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:cup-water"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return average water per session."""
+        return self.coordinator.data.get("avg_water_per_session", 0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        return {
+            "total_sessions": self.coordinator.data.get("total_watering_sessions", 0),
+            "calculation_basis": "last_10_sessions",
+            "strain": self.coordinator.plant_strain,
+        }
+
+
+class PlantWateringFrequencySensor(PlantSensorBase):
+    """Watering frequency sensor."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize watering frequency sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_watering_frequency"
+        self._attr_name = f"{coordinator.plant_name} Gießfrequenz"
+        self._attr_native_unit_of_measurement = UNIT_DAYS
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:calendar-sync"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return watering frequency in days."""
+        return self.coordinator.data.get("watering_frequency", 0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        freq = self.coordinator.data.get("watering_frequency", 0)
+        if freq == 0:
+            pattern = "Not enough data"
+        elif freq < 1:
+            pattern = "Multiple times daily"
+        elif freq <= 2:
+            pattern = "Every 1-2 days"
+        elif freq <= 4:
+            pattern = "Every 3-4 days"
+        else:
+            pattern = "Weekly or less"
+            
+        return {
+            "pattern": pattern,
+            "calculation_basis": "last_5_sessions",
+            "strain": self.coordinator.plant_strain,
+        }
+
+
+class PlantWateringDebugSensor(PlantSensorBase):
+    """Watering history debug sensor."""
+
+    def __init__(self, coordinator: PlantCoordinator) -> None:
+        """Initialize watering debug sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"plant_{coordinator.plant_id}_watering_debug"
+        self._attr_name = f"{coordinator.plant_name} Watering Debug"
+        self._attr_icon = "mdi:bug-check"
+        self._attr_entity_registry_enabled_default = False  # Disabled by default
+
+    @property
+    def native_value(self) -> str:
+        """Return number of watering entries."""
+        history = self.coordinator.get_watering_history()
+        return f"{len(history)} sessions"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return watering history and debug info."""
+        history = self.coordinator.get_watering_history()
+        
+        return {
+            "plant_id": self.coordinator.plant_id,
+            "default_water_volume": self.coordinator.default_water_volume,
+            "watering_history": history[-5:] if history else [],  # Last 5 entries
+            "total_sessions": len(history),
+            "tracking_method": "watering_history_array",
+            "storage_location": "config_entry_options",
+            "first_watering": history[0] if history else None,
+            "last_watering": history[-1] if history else None,
         }
 
 

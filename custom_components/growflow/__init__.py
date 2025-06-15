@@ -19,7 +19,8 @@ PLATFORMS: list[Platform] = [
     Platform.NUMBER, 
     Platform.DATE, 
     Platform.TEXT, 
-    Platform.SELECT
+    Platform.SELECT,
+    Platform.BUTTON,  # ✅ NEW: Button platform
 ]
 
 
